@@ -155,6 +155,8 @@ namespace RgbAuto
         bool ledInitialized; // true once the LED stack is live (drives the spawn-failure fallback)
         NotifyIcon trayIcon;
         Icon iconOn, iconOff; // cached; created once, destroyed on close
+        // after each LED write: no further writes, and On-direction events are echo-guarded
+        const double RefractorySeconds = 3.0;
         // debounce state
         DisplayState rawState = DisplayState.On;  // last reported display state
         DateTime rawSince = DateTime.Now;         // since when it has held
@@ -175,11 +177,17 @@ namespace RgbAuto
             catch { return false; }
         }
 
-        // hand over to a deferred instance that waits for iGC.Lite to exit, then becomes the daemon.
-        // If the spawn itself fails we must not leave zero daemons behind: retry, and when the LED
-        // stack is not live yet (yield-at-start path) fall back to waiting in-process, which is
-        // exactly what the deferred instance would have done.
-        public void SpawnDeferredAndExit(int code)
+        // shared poll: used by a deferred instance (Main) and by the in-process handoff fallback
+        public static void WaitForLiteExit()
+        {
+            while (LiteRunning()) Thread.Sleep(3000);
+        }
+
+        // Hand over to a deferred instance that waits for iGC.Lite to exit, then becomes the daemon,
+        // and exit — UNLESS the spawn itself fails before the LED stack is live: then we must not
+        // leave zero daemons behind, so we wait in-process (exactly what the deferred instance would
+        // have done) and return, letting OnLoad continue. Callers must tolerate both postconditions.
+        public void HandoffOrWaitInProcess(int code)
         {
             bool spawned = false;
             for (int attempt = 1; attempt <= 3 && !spawned; attempt++)
@@ -205,7 +213,7 @@ namespace RgbAuto
             if (!spawned && !ledInitialized)
             {
                 Log.W("spawn failed before LED init; waiting in-process for iGC.Lite to exit.");
-                while (LiteRunning()) Thread.Sleep(3000);
+                WaitForLiteExit();
                 Log.W("iGC.Lite closed; resuming in-process.");
                 return; // OnLoad continues and initializes normally
             }
@@ -291,7 +299,7 @@ namespace RgbAuto
             if (LiteRunning())
             {
                 Log.W("iGC.Lite is running at daemon start; deferring.");
-                SpawnDeferredAndExit(5);
+                HandoffOrWaitInProcess(5);
             }
             drv = new ServiceLed();
             // init watchdog: native Init can block if another app holds the hardware
@@ -331,7 +339,7 @@ namespace RgbAuto
                 {
                     double stable = (DateTime.Now - rawSince).TotalSeconds;
                     double sinceAction = (DateTime.Now - lastAction).TotalSeconds;
-                    if (sinceAction < 3.0) return; // refractory: LED writes can themselves trigger state events
+                    if (sinceAction < RefractorySeconds) return; // refractory: LED writes can themselves trigger state events
                     if (rawState == DisplayState.Off && stable >= 1.5 && appliedState != DisplayState.Off)
                     {
                         appliedState = DisplayState.Off;
@@ -364,7 +372,7 @@ namespace RgbAuto
                     if (LiteRunning())
                     {
                         Log.W("iGC.Lite started; daemon yielding.");
-                        SpawnDeferredAndExit(6);
+                        HandoffOrWaitInProcess(6);
                     }
                 }
             });
@@ -392,7 +400,7 @@ namespace RgbAuto
                         // a genuine wake within 3s of a lights-off write is missed until the next
                         // transition (tray "恢复灯效" covers it), and a Restore write's own Off echo is
                         // accepted, parking lights off — both fail safe.
-                        if (sinceAction < 3.0 && state != DisplayState.Off && appliedState == DisplayState.Off)
+                        if (sinceAction < RefractorySeconds && state != DisplayState.Off && appliedState == DisplayState.Off)
                         {
                             Log.W("ignored (probable echo of Sleep write, " + sinceAction.ToString("0.0") + "s ago)");
                         }
@@ -449,7 +457,7 @@ namespace RgbAuto
             if (deferred)
             {
                 Log.W("=== deferred start: waiting for iGC.Lite to exit ===");
-                while (MainForm.LiteRunning()) Thread.Sleep(3000);
+                MainForm.WaitForLiteExit();
                 Log.W("=== iGC.Lite closed; daemon resuming ===");
             }
             AppDomain.CurrentDomain.AssemblyResolve += (sender, a) =>

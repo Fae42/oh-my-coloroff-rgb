@@ -152,6 +152,7 @@ namespace RgbAuto
     {
         IntPtr regHandle;
         ServiceLed drv;
+        bool ledInitialized; // true once the LED stack is live (drives the spawn-failure fallback)
         NotifyIcon trayIcon;
         Icon iconOn, iconOff; // cached; created once, destroyed on close
         // debounce state
@@ -174,21 +175,41 @@ namespace RgbAuto
             catch { return false; }
         }
 
-        // hand over to a deferred instance that waits for iGC.Lite to exit, then becomes the daemon
+        // hand over to a deferred instance that waits for iGC.Lite to exit, then becomes the daemon.
+        // If the spawn itself fails we must not leave zero daemons behind: retry, and when the LED
+        // stack is not live yet (yield-at-start path) fall back to waiting in-process, which is
+        // exactly what the deferred instance would have done.
         public void SpawnDeferredAndExit(int code)
         {
-            try
+            bool spawned = false;
+            for (int attempt = 1; attempt <= 3 && !spawned; attempt++)
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                try
                 {
-                    FileName = Application.ExecutablePath,
-                    Arguments = "--deferred",
-                    WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory,
-                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
-                });
-                Log.W("spawned deferred instance; exiting (" + code + ")");
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = Application.ExecutablePath,
+                        Arguments = "--deferred",
+                        WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory,
+                        WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
+                    });
+                    spawned = true;
+                    Log.W("spawned deferred instance; exiting (" + code + ")");
+                }
+                catch (Exception ex)
+                {
+                    Log.W("spawn deferred failed (attempt " + attempt + "/3): " + ex.Message);
+                    Thread.Sleep(1000);
+                }
             }
-            catch (Exception ex) { Log.W("spawn deferred failed: " + ex.Message); }
+            if (!spawned && !ledInitialized)
+            {
+                Log.W("spawn failed before LED init; waiting in-process for iGC.Lite to exit.");
+                while (LiteRunning()) Thread.Sleep(3000);
+                Log.W("iGC.Lite closed; resuming in-process.");
+                return; // OnLoad continues and initializes normally
+            }
+            if (!spawned) Log.W("spawn failed with LED stack live; exiting anyway (" + code + "). Relaunch RgbAuto.exe after closing iGC.Lite.");
             // best-effort cleanup; Environment.Exit skips OnFormClosing
             if (trayIcon != null) { try { trayIcon.Visible = false; trayIcon.Dispose(); } catch { } }
             foreach (var ic in new Icon[] { iconOn, iconOff })
@@ -292,6 +313,7 @@ namespace RgbAuto
                 Log.W("no LED device found; exiting.");
                 Environment.Exit(4);
             }
+            ledInitialized = true;
             Guid g = Native.GUID_CONSOLE_DISPLAY_STATE;
             regHandle = Native.RegisterPowerSettingNotification(Handle, ref g, Native.DEVICE_NOTIFY_WINDOW_HANDLE);
             Log.W("registered display-state notify, handle=" + regHandle);
@@ -361,8 +383,24 @@ namespace RgbAuto
                     Log.W("display state -> " + state);
                     if (state != rawState)
                     {
-                        rawState = state;
-                        rawSince = DateTime.Now;
+                        double sinceAction = (DateTime.Now - lastAction).TotalSeconds;
+                        // One-way echo guard: a Sleep write can echo back a spurious "On" within the
+                        // refractory window; answering it would resurrect the lights while the display
+                        // is off and re-arm the write/echo loop, so swallow it. Off events are NEVER
+                        // ignored — lights-on-with-display-off defeats the product's purpose, and a
+                        // wrongly accepted Off only parks the lights in the safe direction. Costs:
+                        // a genuine wake within 3s of a lights-off write is missed until the next
+                        // transition (tray "恢复灯效" covers it), and a Restore write's own Off echo is
+                        // accepted, parking lights off — both fail safe.
+                        if (sinceAction < 3.0 && state != DisplayState.Off && appliedState == DisplayState.Off)
+                        {
+                            Log.W("ignored (probable echo of Sleep write, " + sinceAction.ToString("0.0") + "s ago)");
+                        }
+                        else
+                        {
+                            rawState = state;
+                            rawSince = DateTime.Now;
+                        }
                     }
                 }
             }

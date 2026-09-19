@@ -43,6 +43,17 @@ namespace RgbAuto
             public int DataLength;
             public byte Data;
         }
+
+        // Decode a GUID_CONSOLE_DISPLAY_STATE broadcast; shared by MainForm and the tests' ListenerForm.
+        public static bool TryDecodeDisplayState(ref Message m, out DisplayState state)
+        {
+            state = DisplayState.Off;
+            if (m.Msg != WM_POWERBROADCAST || m.WParam.ToInt32() != PBT_POWERSETTINGCHANGE) return false;
+            var st = (POWERBROADCAST_SETTING)Marshal.PtrToStructure(m.LParam, typeof(POWERBROADCAST_SETTING));
+            if (st.PowerSetting != GUID_CONSOLE_DISPLAY_STATE) return false;
+            state = (DisplayState)BitConverter.ToInt32(new byte[] { st.Data, 0, 0, 0 }, 0);
+            return true;
+        }
     }
 
     public static class Log
@@ -82,13 +93,11 @@ namespace RgbAuto
         }
     }
 
-    // LED control via the iGC.Lite native service stack (hardware requires a resident pumper).
-    internal class ServiceLed
+    // Construction of the iGC.Lite LED service stack, shared by the daemon (ServiceLed)
+    // and RgbAuto.Tests (SvcMode). Hardware requires a resident pumper.
+    public static class LedStack
     {
-        iGC.Lite.Service.LED.LEDAPIService svc;
-        readonly System.Collections.Generic.List<string> ids = new System.Collections.Generic.List<string>();
-
-        public bool Init()
+        public static iGC.Lite.Service.LED.LEDAPIService Create(out int deviceCount, System.Collections.Generic.List<string> idsOut)
         {
             string cfgDir = Path.Combine(Program.LiteDir, "CCData", "Configs");
             var loggerFactory = new Castle.Core.Logging.TraceLoggerFactory(Castle.Core.Logging.LoggerLevel.Error);
@@ -106,7 +115,7 @@ namespace RgbAuto
             }
             catch (Exception ex) { Log.W("hw monitor failed, using null: " + ex.Message); }
 
-            svc = new iGC.Lite.Service.LED.LEDAPIService(
+            var svc = new iGC.Lite.Service.LED.LEDAPIService(
                 loggerFactory,
                 (iGameCenter.ConfigManager.IConfigManager<iGameCenter.ConfigManager.NormalConfig>)cmNormal,
                 (iGameCenter.ConfigManager.IConfigManager<iGameCenter.ConfigManager.LiteRGBEffectConfig>)cmLight,
@@ -115,16 +124,50 @@ namespace RgbAuto
             var r = svc.Init();
             Log.W("svc.Init -> " + r + " (" + (int)r + ")");
 
+            deviceCount = 0;
             var infos = svc.GetDeviceInfos();
             if (infos != null)
             {
+                deviceCount = infos.Count;
                 foreach (var di in infos)
                 {
                     Log.W("  dev type=" + di.DeviceType + " name=" + di.Name + " id=" + di.ID + " idx=" + di.DeviceIndex);
-                    if (!string.IsNullOrEmpty(di.ID)) ids.Add(di.ID);
+                    if (idsOut != null && !string.IsNullOrEmpty(di.ID)) idsOut.Add(di.ID);
                 }
             }
-            return infos != null && infos.Count > 0;
+            return svc;
+        }
+
+        // lights-out parameter set (Sleep effect, zero brightness)
+        public static iGameEasyCalc_LEDParameter SleepParam()
+        {
+            var p = new iGameEasyCalc_LEDParameter();
+            p.LEDType = iGameEasyCalc_LEDType.Sleep;
+            p.Brightness = 0;
+            return p;
+        }
+
+        // default Rainbow parameter set (tests use as-is; LedDriver overlays the Lite config on top)
+        public static iGameEasyCalc_LEDParameter RainbowParam()
+        {
+            var p = new iGameEasyCalc_LEDParameter();
+            p.LEDType = iGameEasyCalc_LEDType.Rainbow;
+            p.Brightness = 255; p.Speed = 2; p.LEDCount = 100; p.FPS = 30; p.Direction = 0; p.Sensitivity = 10;
+            return p;
+        }
+    }
+
+    // LED control via the iGC.Lite native service stack (hardware requires a resident pumper).
+    internal class ServiceLed
+    {
+        iGC.Lite.Service.LED.LEDAPIService svc;
+        readonly System.Collections.Generic.List<string> ids = new System.Collections.Generic.List<string>();
+
+        public bool Init()
+        {
+            int deviceCount;
+            svc = LedStack.Create(out deviceCount, ids);
+            return deviceCount > 0;
         }
 
         public void Restore()
@@ -137,9 +180,7 @@ namespace RgbAuto
         public void Sleep()
         {
             if (svc == null) return;
-            var p = new iGameEasyCalc_LEDParameter();
-            p.LEDType = iGameEasyCalc_LEDType.Sleep;
-            p.Brightness = 0;
+            var p = LedStack.SleepParam();
             foreach (var devId in ids)
             {
                 var r = svc.SetLightingEffect(devId, p);
@@ -220,11 +261,18 @@ namespace RgbAuto
             if (!spawned) Log.W("spawn failed with LED stack live; exiting anyway (" + code + "). Relaunch RgbAuto.exe after closing iGC.Lite.");
             // best-effort cleanup; Environment.Exit skips OnFormClosing
             if (trayIcon != null) { try { trayIcon.Visible = false; trayIcon.Dispose(); } catch { } }
+            DisposeIcons();
+            Environment.Exit(code);
+        }
+
+        // cached icons were created with Icon.FromHandle (we own the handles) — destroy them
+        void DisposeIcons()
+        {
             foreach (var ic in new Icon[] { iconOn, iconOff })
             {
                 if (ic != null) { try { Native.DestroyIcon(ic.Handle); } catch { } }
             }
-            Environment.Exit(code);
+            iconOn = iconOff = null;
         }
 
         void CreateTray()
@@ -299,7 +347,7 @@ namespace RgbAuto
             if (LiteRunning())
             {
                 Log.W("iGC.Lite is running at daemon start; deferring.");
-                HandoffOrWaitInProcess(5);
+                HandoffOrWaitInProcess(Program.ExitYieldAtStart);
             }
             drv = new ServiceLed();
             // init watchdog: native Init can block if another app holds the hardware
@@ -314,12 +362,12 @@ namespace RgbAuto
             if (!t.Join(40000))
             {
                 Log.W("init blocked >40s; another program may hold LED hardware (iGC.Lite?). exiting.");
-                Environment.Exit(3);
+                Environment.Exit(Program.ExitInitBlocked);
             }
             if (!ok)
             {
                 Log.W("no LED device found; exiting.");
-                Environment.Exit(4);
+                Environment.Exit(Program.ExitNoDevice);
             }
             ledInitialized = true;
             Guid g = Native.GUID_CONSOLE_DISPLAY_STATE;
@@ -372,7 +420,7 @@ namespace RgbAuto
                     if (LiteRunning())
                     {
                         Log.W("iGC.Lite started; daemon yielding.");
-                        HandoffOrWaitInProcess(6);
+                        HandoffOrWaitInProcess(Program.ExitYieldWhileRunning);
                     }
                 }
             });
@@ -382,33 +430,29 @@ namespace RgbAuto
 
         protected override void WndProc(ref Message m)
         {
-            if (m.Msg == Native.WM_POWERBROADCAST && m.WParam.ToInt32() == Native.PBT_POWERSETTINGCHANGE)
+            DisplayState state;
+            if (Native.TryDecodeDisplayState(ref m, out state))
             {
-                var st = (Native.POWERBROADCAST_SETTING)Marshal.PtrToStructure(m.LParam, typeof(Native.POWERBROADCAST_SETTING));
-                if (st.PowerSetting == Native.GUID_CONSOLE_DISPLAY_STATE)
+                Log.W("display state -> " + state);
+                if (state != rawState)
                 {
-                    var state = (DisplayState)BitConverter.ToInt32(new byte[] { st.Data, 0, 0, 0 }, 0);
-                    Log.W("display state -> " + state);
-                    if (state != rawState)
+                    double sinceAction = (DateTime.Now - lastAction).TotalSeconds;
+                    // One-way echo guard: a Sleep write can echo back a spurious "On" within the
+                    // refractory window; answering it would resurrect the lights while the display
+                    // is off and re-arm the write/echo loop, so swallow it. Off events are NEVER
+                    // ignored — lights-on-with-display-off defeats the product's purpose, and a
+                    // wrongly accepted Off only parks the lights in the safe direction. Costs:
+                    // a genuine wake within 3s of a lights-off write is missed until the next
+                    // transition (tray "恢复灯效" covers it), and a Restore write's own Off echo is
+                    // accepted, parking lights off — both fail safe.
+                    if (sinceAction < RefractorySeconds && state != DisplayState.Off && appliedState == DisplayState.Off)
                     {
-                        double sinceAction = (DateTime.Now - lastAction).TotalSeconds;
-                        // One-way echo guard: a Sleep write can echo back a spurious "On" within the
-                        // refractory window; answering it would resurrect the lights while the display
-                        // is off and re-arm the write/echo loop, so swallow it. Off events are NEVER
-                        // ignored — lights-on-with-display-off defeats the product's purpose, and a
-                        // wrongly accepted Off only parks the lights in the safe direction. Costs:
-                        // a genuine wake within 3s of a lights-off write is missed until the next
-                        // transition (tray "恢复灯效" covers it), and a Restore write's own Off echo is
-                        // accepted, parking lights off — both fail safe.
-                        if (sinceAction < RefractorySeconds && state != DisplayState.Off && appliedState == DisplayState.Off)
-                        {
-                            Log.W("ignored (probable echo of Sleep write, " + sinceAction.ToString("0.0") + "s ago)");
-                        }
-                        else
-                        {
-                            rawState = state;
-                            rawSince = DateTime.Now;
-                        }
+                        Log.W("ignored (probable echo of Sleep write, " + sinceAction.ToString("0.0") + "s ago)");
+                    }
+                    else
+                    {
+                        rawState = state;
+                        rawSince = DateTime.Now;
                     }
                 }
             }
@@ -419,11 +463,7 @@ namespace RgbAuto
         {
             if (regHandle != IntPtr.Zero) Native.UnregisterPowerSettingNotification(regHandle);
             if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); trayIcon = null; }
-            foreach (var ic in new Icon[] { iconOn, iconOff })
-            {
-                if (ic != null) { try { Native.DestroyIcon(ic.Handle); } catch { } }
-            }
-            iconOn = iconOff = null;
+            DisposeIcons();
             base.OnFormClosing(e);
         }
     }
@@ -432,6 +472,29 @@ namespace RgbAuto
     {
         public const string LiteDir = @"C:\Program Files\iGC.Lite";
         const string MutexName = @"Local\RgbAutoDaemon.SingleInstance";
+
+        // process exit codes (visible to Task Scheduler and in logs)
+        public const int ExitOk = 0;
+        public const int ExitInitBlocked = 3;    // native Init blocked >40s, another app holds the hardware
+        public const int ExitNoDevice = 4;       // no LED device enumerated
+        public const int ExitYieldAtStart = 5;   // iGC.Lite running when the daemon started
+        public const int ExitYieldWhileRunning = 6; // iGC.Lite started while the daemon was running
+
+        // Resolve and load the vendor assemblies under LiteDir and make its native iGameAPI
+        // folder reachable. Shared by the daemon and RgbAuto.Tests.
+        public static void Bootstrap()
+        {
+            AppDomain.CurrentDomain.AssemblyResolve += (sender, a) =>
+            {
+                string p = Path.Combine(LiteDir, new AssemblyName(a.Name).Name + ".dll");
+                return File.Exists(p) ? Assembly.LoadFrom(p) : null;
+            };
+            Assembly.LoadFrom(Path.Combine(LiteDir, "iGameAPI.Contracts.dll"));
+
+            Directory.SetCurrentDirectory(LiteDir);
+            string pathEnv = Environment.GetEnvironmentVariable("PATH");
+            Environment.SetEnvironmentVariable("PATH", Path.Combine(LiteDir, "iGameAPI") + ";" + pathEnv);
+        }
 
         [STAThread]
         static int Main(string[] args)
@@ -452,7 +515,7 @@ namespace RgbAuto
             if (!owns)
             {
                 Log.W("another instance is already active; exiting.");
-                return 0;
+                return ExitOk;
             }
             if (deferred)
             {
@@ -460,21 +523,12 @@ namespace RgbAuto
                 MainForm.WaitForLiteExit();
                 Log.W("=== iGC.Lite closed; daemon resuming ===");
             }
-            AppDomain.CurrentDomain.AssemblyResolve += (sender, a) =>
-            {
-                string p = Path.Combine(LiteDir, new AssemblyName(a.Name).Name + ".dll");
-                return File.Exists(p) ? Assembly.LoadFrom(p) : null;
-            };
-            Assembly.LoadFrom(Path.Combine(LiteDir, "iGameAPI.Contracts.dll"));
-
-            Directory.SetCurrentDirectory(LiteDir);
-            string pathEnv = Environment.GetEnvironmentVariable("PATH");
-            Environment.SetEnvironmentVariable("PATH", Path.Combine(LiteDir, "iGameAPI") + ";" + pathEnv);
+            Bootstrap();
 
             Log.W("=== daemon start ===");
             Application.Run(new MainForm());
             GC.KeepAlive(single); // hold the instance mutex for the whole process lifetime
-            return 0;
+            return ExitOk;
         }
     }
 }

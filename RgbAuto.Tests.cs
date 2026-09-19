@@ -52,15 +52,9 @@ namespace RgbAuto
 
         iGameEasyCalc_LEDParameter BuildParam(iGameEasyCalc_LEDType t)
         {
-            var p = new iGameEasyCalc_LEDParameter();
-            if (t == iGameEasyCalc_LEDType.Sleep)
-            {
-                p.LEDType = iGameEasyCalc_LEDType.Sleep;
-                p.Brightness = 0;
-                return p;
-            }
+            if (t == iGameEasyCalc_LEDType.Sleep) return LedStack.SleepParam();
+            var p = LedStack.RainbowParam(); // sane defaults, overlaid with the Lite config below
             p.LEDType = t;
-            p.Brightness = 255; p.Speed = 2; p.LEDCount = 100; p.FPS = 30; p.Direction = 0; p.Sensitivity = 10;
             try
             {
                 string cfg = Path.Combine(Program.LiteDir, "CCData", "Configs", "GlobalLightingConfig.json");
@@ -252,61 +246,21 @@ namespace RgbAuto
     {
         public static int Run(string[] args)
         {
-            string cfgDir = Path.Combine(Program.LiteDir, "CCData", "Configs");
             try
             {
-                var loggerFactory = new Castle.Core.Logging.TraceLoggerFactory(Castle.Core.Logging.LoggerLevel.Error);
-
-                object cmNormal = Cm.Make(typeof(iGameCenter.ConfigManager.NormalConfig), loggerFactory, Path.Combine(cfgDir, "NormalConfig.json"));
-                object cmLight = Cm.Make(typeof(iGameCenter.ConfigManager.LiteRGBEffectConfig), loggerFactory, Path.Combine(cfgDir, "LiteRGBEffectConfig.json"));
-                object cmOrder = Cm.Make(typeof(iGameCenter.ConfigManager.Configs.LEDOrderConfig), loggerFactory, Path.Combine(cfgDir, "LEDOrderConfig.json"));
-                var cmf = new iGameCenter.ConfigManager.ConfigManagerFactory(loggerFactory);
-
-                iGameCenter.Contracts.Hardware.IHardwareMonitor hw = null;
-                try
-                {
-                    hw = new iGameCenter.Hardware.HardwareMonitor(new iGameCenter.Hardware.HardwareMonitorConfig());
-                    Log.W("hw monitor created");
-                }
-                catch (Exception ex) { Log.W("hw monitor failed, using null: " + ex.Message); }
-
-                var svc = new iGC.Lite.Service.LED.LEDAPIService(
-                    loggerFactory,
-                    (iGameCenter.ConfigManager.IConfigManager<iGameCenter.ConfigManager.NormalConfig>)cmNormal,
-                    (iGameCenter.ConfigManager.IConfigManager<iGameCenter.ConfigManager.LiteRGBEffectConfig>)cmLight,
-                    (iGameCenter.ConfigManager.IConfigManager<iGameCenter.ConfigManager.Configs.LEDOrderConfig>)cmOrder,
-                    cmf, hw);
-                Log.W("svc constructed");
-                var r = svc.Init();
-                Log.W("svc.Init -> " + r + " (" + (int)r + ")");
-
-                var infos = svc.GetDeviceInfos();
-                Log.W("device infos count=" + (infos == null ? -1 : infos.Count));
+                int deviceCount;
                 var ids = new System.Collections.Generic.List<string>();
-                if (infos != null)
-                {
-                    foreach (var di in infos)
-                    {
-                        Log.W("  dev type=" + di.DeviceType + " name=" + di.Name + " id=" + di.ID + " idx=" + di.DeviceIndex);
-                        if (!string.IsNullOrEmpty(di.ID)) ids.Add(di.ID);
-                    }
-                }
+                var svc = LedStack.Create(out deviceCount, ids);
+                Log.W("device infos count=" + deviceCount);
 
                 try { svc.InitLightingEffect(); Log.W("InitLightingEffect done"); }
                 catch (Exception ex) { Log.W("InitLightingEffect: " + ex.Message); }
 
                 string which = args.Length > 2 ? args[2] : "sleep";
-                int secs = 20;
-                for (int i = 3; i < args.Length; i++)
-                {
-                    int v;
-                    if (int.TryParse(args[i], out v)) { secs = v; break; }
-                }
+                int secs = TestMode.ParseSecs(args, 3, 20);
                 if (which == "sleep" || which == "rainbow")
                 {
-                    var p = new iGameAPI.Contracts.LED.iGameEasyCalc_LEDParameter();
-                    if (which == "sleep") { p.LEDType = iGameAPI.Contracts.LED.iGameEasyCalc_LEDType.Sleep; p.Brightness = 0; }
-                    else { p.LEDType = iGameAPI.Contracts.LED.iGameEasyCalc_LEDType.Rainbow; p.Brightness = 255; p.Speed = 2; p.LEDCount = 100; p.FPS = 30; p.Direction = 0; p.Sensitivity = 10; }
+                    var p = which == "sleep" ? LedStack.SleepParam() : LedStack.RainbowParam();
                     foreach (var devId in ids)
                     {
                         var rr = svc.SetLightingEffect(devId, p);
@@ -347,15 +301,9 @@ namespace RgbAuto
 
         protected override void WndProc(ref Message m)
         {
-            if (m.Msg == Native.WM_POWERBROADCAST && m.WParam.ToInt32() == Native.PBT_POWERSETTINGCHANGE)
-            {
-                var st = (Native.POWERBROADCAST_SETTING)Marshal.PtrToStructure(m.LParam, typeof(Native.POWERBROADCAST_SETTING));
-                if (st.PowerSetting == Native.GUID_CONSOLE_DISPLAY_STATE)
-                {
-                    var state = (DisplayState)BitConverter.ToInt32(new byte[] { st.Data, 0, 0, 0 }, 0);
-                    Log.W("display state -> " + state + " [listen]");
-                }
-            }
+            DisplayState state;
+            if (Native.TryDecodeDisplayState(ref m, out state))
+                Log.W("display state -> " + state + " [listen]");
             base.WndProc(ref m);
         }
 
@@ -368,15 +316,21 @@ namespace RgbAuto
 
     internal class TestMode
     {
+        // first int argument at or after startIndex wins
+        internal static int ParseSecs(string[] args, int startIndex, int fallback)
+        {
+            for (int i = startIndex; i < args.Length; i++)
+            {
+                int v;
+                if (int.TryParse(args[i], out v)) return v;
+            }
+            return fallback;
+        }
+
         public static int Run(string[] args)
         {
             string which = args.Length > 1 ? args[1] : "probe";
-            int secs = 20;
-            for (int i = 2; i < args.Length; i++)
-            {
-                int v;
-                if (int.TryParse(args[i], out v)) { secs = v; break; }
-            }
+            int secs = ParseSecs(args, 2, 20);
             if (which == "svc")
                 return SvcMode.Run(args);
             var d = new LedDriver();
@@ -401,16 +355,7 @@ namespace RgbAuto
         [STAThread]
         static int Main(string[] args)
         {
-            AppDomain.CurrentDomain.AssemblyResolve += (sender, a) =>
-            {
-                string p = Path.Combine(Program.LiteDir, new AssemblyName(a.Name).Name + ".dll");
-                return File.Exists(p) ? Assembly.LoadFrom(p) : null;
-            };
-            Assembly.LoadFrom(Path.Combine(Program.LiteDir, "iGameAPI.Contracts.dll"));
-
-            Directory.SetCurrentDirectory(Program.LiteDir);
-            string pathEnv = Environment.GetEnvironmentVariable("PATH");
-            Environment.SetEnvironmentVariable("PATH", Path.Combine(Program.LiteDir, "iGameAPI") + ";" + pathEnv);
+            Program.Bootstrap();
 
             if (args.Length > 0 && args[0] == "listen")
             {

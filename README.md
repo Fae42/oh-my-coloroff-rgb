@@ -1,4 +1,4 @@
-# oh-my-rgb
+# oh-my-coloroff-rgb
 
 ![banner](assets/banner.png)
 
@@ -44,8 +44,8 @@ the LED service stack that ships with iGC.Lite (read-only; nothing under
 ## Install
 
 ```powershell
-git clone <this-repo> oh-my-rgb
-cd oh-my-rgb
+git clone <this-repo> oh-my-coloroff-rgb
+cd oh-my-coloroff-rgb
 powershell -ExecutionPolicy Bypass -File setup_autostart.ps1
 ```
 

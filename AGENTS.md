@@ -1,6 +1,6 @@
 # AGENTS.md — contributor & agent notes for oh-my-coloroff-rgb
 
-Human-facing docs live in [README.md](README.md) / [README.zh-CN.md](README.zh-CN.md).
+Human-facing docs live in [README.md](README.md) (Chinese, default) / [README.en.md](README.en.md).
 This file is for anyone (human or coding agent) about to modify the code. Read it first;
 it records hard-won empirical facts that are not visible in the source.
 

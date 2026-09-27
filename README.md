@@ -47,7 +47,7 @@
 ## 常用操作
 
 - 手动启动：双击 `RgbAuto.exe`
-- 停止：托盘右键 → **退出**（停用看门狗；**灯亮时会自动启动 iGC.Lite 接管推流，灯效继续流动**——灯必须由常驻进程推流，直接退出会冻结画面；灯灭时直接退出保持全黑。重新运行 `setup_autostart.ps1` 或手动启动 `RgbAuto.exe` 即恢复守护，Lite 会让位）
+- 停止：托盘右键 → **退出**（停用看门狗后直接退出，灯保持退出时的状态不变；重新运行 `setup_autostart.ps1` 或手动启动 `RgbAuto.exe` 即恢复看门狗）
 - 开机自启：`powershell -ExecutionPolicy Bypass -File setup_autostart.ps1`
 - 停用自启：`powershell -ExecutionPolicy Bypass -File remove_autostart.ps1`（同时移除看门狗，停用后不会复活）
 

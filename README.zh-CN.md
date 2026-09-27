@@ -1,6 +1,6 @@
-[English](README.md) | [简体中文](README.zh-CN.md)
-
 ![banner](assets/banner.png)
+
+[English](README.md) | [简体中文](README.zh-CN.md)
 
 **屏幕熄灭 → 灯灭。屏幕点亮 → 灯效回来。**
 
@@ -55,19 +55,10 @@ RGB 风扇很炫——直到你离开座位，显示器都睡了，风扇还在�
 3. `iGC.Lite.Service.LED.LEDAPIService` 为手工构造（其 DI 容器是 internal 的——
    用反射填充 `ConfigManager<T>` 的非公开构造函数），与厂商自己的 UI 用法完全一致。
 
-## 硬件实测发现（BATTLE-AX B760M + iGC.Lite，经验证）
+## 给 Agent 与贡献者
 
-写下来，免得后来的人再踩一遍坑：
-
-- **MCU 需要常驻进程推流**。任何控制进程退出——包括官方 Lite——灯都会冻结在最后一帧。
-  即使干净地 `Uninit()` 成功，开机的默认动画也不会回来，只有重启电脑才会恢复。
-  BIOS 默认彩虹只在第一次软件初始化之前运行，之后永不返回。
-- `SetLightingEffect` 成功时返回 `UnknowError(1)`。信风扇，别信 HRESULT。
-- `SendMessage(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, -1)`（无输入的"强制亮屏"）
-  会让 Windows 约 1.1 秒后真的把显示器关回去。日志里成对的 On→Off 是 Windows 的行为，不是守护的噪音。
-  测试唤醒请用真实键鼠输入。
-- 灯效写入会回声出假的电源事件；单向回声守卫（关灯写入后 3 秒内忽略 On 方向事件、
-  永不忽略 Off）保证了循环稳定。代价：关灯后 3 秒内的真实唤醒会等到下一次状态跳变才恢复。
+硬件实测发现、架构不变量与厂商栈注意事项见 [AGENTS.md](AGENTS.md)（英文）——
+改代码前请先读。
 
 ## 局限性
 

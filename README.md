@@ -1,6 +1,6 @@
-[English](README.md) | [简体中文](README.zh-CN.md)
-
 ![banner](assets/banner.png)
+
+[English](README.md) | [简体中文](README.zh-CN.md)
 
 **Screen off → lights off. Screen on → lights back.**
 
@@ -66,22 +66,10 @@ the LED service stack that ships with iGC.Lite (read-only; nothing under
    internal — reflection fills `ConfigManager<T>` non-public constructors) and reused
    exactly as the vendor's own UI does.
 
-## Hardware findings (empirical, BATTLE-AX B760M + iGC.Lite)
+## For agents & contributors
 
-Documented so the next person doesn't rediscover them the hard way:
-
-- **The MCU needs a resident pumper.** Any controlling process exit — ours *and the
-  vendor's Lite* — freezes the LEDs on the last frame. A clean `Uninit()` does not
-  bring back the boot-time default animation; only a reboot does. The BIOS default
-  rainbow runs before the first software init and never returns.
-- `SetLightingEffect` returns `UnknowError(1)` on success. Trust the fans, not the
-  HRESULT.
-- `SendMessage(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, -1)` ("force wake"
-  without input) makes Windows turn the display back off ~1.1 s later. On→Off pairs
-  in the log are Windows behavior, not daemon noise. Wake with real input to test.
-- LED writes echo fake power events; the one-way echo guard (ignore On-direction
-  events for 3 s after a lights-off write, never ignore Off) keeps the loop stable.
-  Cost: a genuine wake within 3 s of a lights-off write waits for the next event.
+Empirical hardware findings, architecture invariants, and vendor-stack caveats live in
+[AGENTS.md](AGENTS.md) — read it before modifying the code.
 
 ## Limitations
 

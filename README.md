@@ -1,4 +1,4 @@
-# oh-my-coloroff-rgb
+[English](README.md) | [简体中文](README.zh-CN.md)
 
 ![banner](assets/banner.png)
 
@@ -8,7 +8,19 @@ Windows tray daemon that syncs Colorful (七彩虹) motherboard RGB fans with th
 power state. When Windows turns the monitor off, the fans go dark; the moment it comes
 back, your saved lighting effect resumes flowing.
 
-七彩虹主板 RGB 风扇的息屏联动守护：屏幕熄灭约 1.5 秒后灯自动灭，亮屏约 1 秒后自动恢复你保存的灯效。常驻推流，灯效永不停帧。
+## TL;DR
+
+Requires: Windows 10/11, a Colorful motherboard, and [iGC.Lite](https://www.colorful.cn) installed.
+
+```powershell
+git clone https://github.com/Fae42/oh-my-coloroff-rgb
+cd oh-my-coloroff-rgb
+powershell -ExecutionPolicy Bypass -File setup_autostart.ps1   # autostart + watchdog
+.\RgbAuto.exe                                                   # or just re-login; done.
+```
+
+No build needed — grab `RgbAuto.exe` from [Releases](../../releases) if you don't want to compile.
+Uninstall: `remove_autostart.ps1`, delete the folder.
 
 ## Why
 
@@ -21,7 +33,7 @@ the LED service stack that ships with iGC.Lite (read-only; nothing under
 
 ## Features
 
-- **Display-driven**: reacts to the real console display state (timeout, hotkey,
+- **Display-driven**: reacts to the real console display state (idle timeout, hotkey,
   `SC_MONITORPOWER` — all covered).
 - **Debounced**: lights change only after the state is stable (1.5 s off / 1.0 s on),
   with a one-way echo guard — LED writes themselves produce fake power events, and
@@ -35,41 +47,13 @@ the LED service stack that ships with iGC.Lite (read-only; nothing under
 - **Multi-device**: pushes the sleep effect to every lighting device the stack
   enumerates (motherboard, and any future Colorful GPU).
 
-## Requirements
-
-- Windows 10/11, .NET Framework 4.x (built in).
-- A Colorful motherboard with 5V ARGB fans, **iGC.Lite installed**
-  (any recent version; the daemon borrows its `iGC.Lite.Service` stack).
-
-## Install
-
-```powershell
-git clone <this-repo> oh-my-coloroff-rgb
-cd oh-my-coloroff-rgb
-powershell -ExecutionPolicy Bypass -File setup_autostart.ps1
-```
-
-The setup script registers two scheduled tasks (logon autostart + 5-minute watchdog)
-and starts nothing else — launch `RgbAuto.exe` or re-login. Scripts locate the install
-directory automatically; keep the folder together.
-
-Build from source (no IDE needed):
-
-```bat
-csc -nologo -platform:x64 -target:winexe -win32icon:assets\app.ico -out:RgbAuto.exe ^
-  "-r:C:\Program Files\iGC.Lite\iGameAPI.Contracts.dll" "-r:C:\Program Files\iGC.Lite\iGC.Lite.Service.dll" ^
-  "-r:C:\Program Files\iGC.Lite\iGameCenter.ConfigManager.dll" "-r:C:\Program Files\iGC.Lite\Castle.Core.dll" ^
-  "-r:C:\Program Files\iGC.Lite\iGameCenter.Hardware.dll" "-r:C:\Program Files\iGC.Lite\iGameCenter.Contracts.dll" ^
-  -r:System.dll -r:System.Windows.Forms.dll -r:System.Drawing.dll RgbAuto.cs
-```
-
 ## Usage
 
 - Daily driving: forget it exists. Tune effects by opening iGC.Lite, then close Lite.
-- Tray exit = stop for real (watchdog paused, logon task untouched — run the setup
-  script again to re-enable everything, `remove_autostart.ps1` to uninstall fully).
-- `tools\关闭显示器.cmd` / `tools\turn-off-display.cmd`: manual screen-off helper for
-  testing the linkage without waiting for the idle timeout.
+- Tray **Exit** = stop for real (watchdog paused; logon task untouched — re-run the
+  setup script to re-enable, `remove_autostart.ps1` to uninstall fully).
+- `tools\turn-off-display.cmd`: manual screen-off helper for testing the linkage
+  without waiting for the idle timeout.
 
 ## How it works
 
@@ -105,6 +89,18 @@ Documented so the next person doesn't rediscover them the hard way:
 - Covers display sleep, not system sleep/hibernate (fans may freeze mid-glow — the
   hardware offers no off-at-suspend hook we've found).
 - Verified on one board model; other Colorful models may enumerate differently.
+
+## Build from source
+
+No IDE needed:
+
+```bat
+csc -nologo -platform:x64 -target:winexe -win32icon:assets\app.ico -out:RgbAuto.exe ^
+  "-r:C:\Program Files\iGC.Lite\iGameAPI.Contracts.dll" "-r:C:\Program Files\iGC.Lite\iGC.Lite.Service.dll" ^
+  "-r:C:\Program Files\iGC.Lite\iGameCenter.ConfigManager.dll" "-r:C:\Program Files\iGC.Lite\Castle.Core.dll" ^
+  "-r:C:\Program Files\iGC.Lite\iGameCenter.Hardware.dll" "-r:C:\Program Files\iGC.Lite\iGameCenter.Contracts.dll" ^
+  -r:System.dll -r:System.Windows.Forms.dll -r:System.Drawing.dll RgbAuto.cs
+```
 
 ## License
 

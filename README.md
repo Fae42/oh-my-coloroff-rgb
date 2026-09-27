@@ -1,82 +1,111 @@
-# RGB Auto Off —— 息屏关灯守护程序
+# oh-my-rgb
 
-## 功能
+![banner](assets/banner.png)
 
-- **屏幕熄灭**（Windows 关闭显示器，超时自动或手动都行）：约 1.5 秒后自动把 RGB 风扇灯推为"睡眠"效果（灯灭）。
-- **屏幕点亮**：灯自动恢复为你保存的灯效（Rainbow 等，读取自 iGC.Lite 配置）。
-- 守护进程常驻后台推流，灯效始终保持流动，不会冻结。
-- **系统托盘图标**：黄点 = 灯亮，灰点 = 灯灭；右键菜单可"恢复灯效 / 立即关灯 / 退出"。
+**Screen off → lights off. Screen on → lights back.**
 
-## 日常使用
+Windows tray daemon that syncs Colorful (七彩虹) motherboard RGB fans with the display
+power state. When Windows turns the monitor off, the fans go dark; the moment it comes
+back, your saved lighting effect resumes flowing.
 
-- 平时**不需要打开 iGC.Lite**，守护程序全权管灯。
-- **想调灯效时**：打开 iGC.Lite 慢慢调 → 调完**直接退出 iGC.Lite 即可**。
-  守护程序检测到 iGC.Lite 打开会自动让位（灯交给 Lite 管），
-  检测到 iGC.Lite 关闭后会在几秒内**自动重新接管**，无需手动重启。
+七彩虹主板 RGB 风扇的息屏联动守护：屏幕熄灭约 1.5 秒后灯自动灭，亮屏约 1 秒后自动恢复你保存的灯效。常驻推流，灯效永不停帧。
 
-## 原理
+## Why
 
-七彩虹主板的灯控只走 iGame 私有通道。本程序复用 iGC.Lite 安装目录自带的
-`iGC.Lite.Service` LED 原生栈（不修改、不替换 iGC.Lite 的任何文件），
-通过 Windows 的 `GUID_CONSOLE_DISPLAY_STATE` 电源通知感知屏幕开关：
+RGB fans look great — until you step away and the display sleeps while the fans keep
+strobing in an empty room. Colorful boards only expose lighting control through the
+vendor's private stack (`iGC.Lite`), which OpenRGB does not support. This daemon reuses
+the LED service stack that ships with iGC.Lite (read-only; nothing under
+`C:\Program Files\iGC.Lite` is modified) and listens to Windows'
+`GUID_CONSOLE_DISPLAY_STATE` power notifications, so no polling and near-zero idle cost.
 
-- 息屏 → `SetLightingEffect(device, Sleep 参数)`
-- 亮屏 → `InitLightingEffect()`（恢复你在 Lite 里选的灯效）
+## Features
 
-屏幕状态带防抖（熄屏稳定 1.5s 才关灯、亮屏稳定 1s 才恢复、每次灯操作后 3s 不应期），
-避免灯效写入本身引发的状态回环导致灯狂闪。另有一条**单向回声守卫**：
-关灯写入后 3 秒内收到的"亮屏"事件基本是灯写入自身的回声，直接忽略；
-"熄屏"事件永不忽略（灯误灭是安全方向，灯误亮违背本程序的目的）。
+- **Display-driven**: reacts to the real console display state (timeout, hotkey,
+  `SC_MONITORPOWER` — all covered).
+- **Debounced**: lights change only after the state is stable (1.5 s off / 1.0 s on),
+  with a one-way echo guard — LED writes themselves produce fake power events, and
+  swallowing only the unsafe direction keeps the loop from re-arming.
+- **System tray**: yellow dot = lights on, gray = off; right-click for
+  *Restore effect / Lights off / Exit* (exit also pauses the watchdog).
+- **Plays nice with iGC.Lite**: open Lite to tune effects — the daemon yields
+  automatically and resumes within seconds after Lite closes.
+- **Self-healing**: a 5-minute watchdog scheduled task relaunches the daemon if it
+  ever dies; single-instance mutex; log rotation at 1 MB.
+- **Multi-device**: pushes the sleep effect to every lighting device the stack
+  enumerates (motherboard, and any future Colorful GPU).
 
-进程层面：命名互斥锁保证单实例（重复启动静默退出，退出码 0）；
-与 iGC.Lite 的让位/接管链在任何时刻收敛为一个守护；
-让位时若 spawn 后备实例失败且灯栈尚未初始化，原地等待 Lite 退出后在本进程直接接管。
+## Requirements
 
-## 文件
+- Windows 10/11, .NET Framework 4.x (built in).
+- A Colorful motherboard with 5V ARGB fans, **iGC.Lite installed**
+  (any recent version; the daemon borrows its `iGC.Lite.Service` stack).
 
-| 文件 | 说明 |
-|---|---|
-| `RgbAuto.exe` | 守护程序本体（托盘图标，后台运行） |
-| `RgbAuto.cs` | 守护程序源代码（只含运行所需核心） |
-| `RgbAuto.Tests.exe` / `.cs` | 诊断/测试工具（不进守护流程，平时不用）：`listen` 只记录息屏事件；`test svc sleep 45` 单次推睡眠效果 45 秒等 |
-| `rgbrun.log` | 运行日志（息屏/亮屏事件、灯操作记录；超过 1 MB 自动轮转为 `rgbrun.log.1`） |
-| `watchdog.ps1` | 看门狗：发现没有守护实例在跑就拉起（由看门狗计划任务每 5 分钟执行） |
-| `setup_autostart.ps1` | 注册开机自启（计划任务 "RGB Auto Off" 登录启动 + "RGB Auto Off Watchdog" 每 5 分钟巡检） |
-| `remove_autostart.ps1` | 停用：删除两个计划任务并结束守护进程 |
+## Install
 
-## 常用操作
+```powershell
+git clone <this-repo> oh-my-rgb
+cd oh-my-rgb
+powershell -ExecutionPolicy Bypass -File setup_autostart.ps1
+```
 
-- 手动启动：双击 `RgbAuto.exe`
-- 停止：托盘右键 → **退出**（停用看门狗后直接退出，灯保持退出时的状态不变；重新运行 `setup_autostart.ps1` 或手动启动 `RgbAuto.exe` 即恢复看门狗）
-- 开机自启：`powershell -ExecutionPolicy Bypass -File setup_autostart.ps1`
-- 停用自启：`powershell -ExecutionPolicy Bypass -File remove_autostart.ps1`（同时移除看门狗，停用后不会复活）
+The setup script registers two scheduled tasks (logon autostart + 5-minute watchdog)
+and starts nothing else — launch `RgbAuto.exe` or re-login. Scripts locate the install
+directory automatically; keep the folder together.
 
-## 注意事项
+Build from source (no IDE needed):
 
-- 请勿移动本文件夹；计划任务里的路径是写死的。
-- 若重装 iGC.Lite 后灯不响应，确认 `C:\Program Files\iGC.Lite` 仍在，再重启守护。
-- 编译命令见 `RgbAuto.cs` 文件头部注释。
-- **注销/关机或被任务管理器强杀时不会恢复灯效**（灯冻结在当前状态）；正常退出请用托盘"退出"。
-- **测试方法陷阱**（2026-09-20 实测）：用 `SendMessage(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, -1)`
-  做"无输入强制亮屏"时，Windows 会在约 1.1 秒后把显示器**真实地**关回去（判定无用户输入），
-  日志里表现为 On → 1.1s 后 Off 的成对事件。这不是守护的 bug，也不是假事件；
-  真实键鼠唤醒不会回灭。测试唤醒请用鼠标/键盘输入（如 `mouse_event` 微动）。
-- 注册 `GUID_CONSOLE_DISPLAY_STATE` 通知时 Windows 会立即回放当前状态，守护借此在启动时收敛
-  （例如启动时显示器已是关闭状态：先短暂恢复灯效，约 3 秒后确认真实状态为关再关灯）。
-- 已知残余代价：关灯后 3 秒内的真实唤醒会被错过，灯保持灭直到下一次状态跳变
-  （托盘"恢复灯效"可立即手动补）；恢复灯效写入若产生假"熄屏"回声会被接受，灯停在灭的安全方向。
-- 极端情况：让位时若连续 3 次 spawn 后备实例都失败且灯栈正在推流（罕见，通常是杀软/权限拦截），
-  守护会以退出码 6 退出且不再自动恢复——关闭 iGC.Lite 后手动启动 `RgbAuto.exe` 即可。
-- `tools\关闭显示器.cmd`：手动关屏小工具（不锁屏、不睡眠），桌面有一份副本；双击后约 1.5 秒灯随屏灭。
+```bat
+csc -nologo -platform:x64 -target:winexe -win32icon:assets\app.ico -out:RgbAuto.exe ^
+  "-r:C:\Program Files\iGC.Lite\iGameAPI.Contracts.dll" "-r:C:\Program Files\iGC.Lite\iGC.Lite.Service.dll" ^
+  "-r:C:\Program Files\iGC.Lite\iGameCenter.ConfigManager.dll" "-r:C:\Program Files\iGC.Lite\Castle.Core.dll" ^
+  "-r:C:\Program Files\iGC.Lite\iGameCenter.Hardware.dll" "-r:C:\Program Files\iGC.Lite\iGameCenter.Contracts.dll" ^
+  -r:System.dll -r:System.Windows.Forms.dll -r:System.Drawing.dll RgbAuto.cs
+```
 
-## 版本记录
+## Usage
 
-- **2026-09-27**：托盘"退出"现在会同时停用看门狗任务（守护保持关闭直到重新启用）；
-  setup_autostart.ps1 重新注册时会自动恢复看门狗。
-- **2026-09-27**：日志超 1 MB 自动轮转（`rgbrun.log.1`）；新增看门狗计划任务
-  "RGB Auto Off Watchdog"（每 5 分钟巡检，守护不在跑就拉起；仅登录时运行）。
-- **2026-09-20**（`b8c1424`）：让位 spawn 失败重试 + 原地降级接管（不再出现零守护）；
-  单向回声守卫修复"假亮屏事件导致熄屏后灯误亮/回环"。
-- **2026-09-20**（`71f4551` 初始提交）：命名互斥锁单实例守卫（修复多守护叠加写灯）；
-  Init 线程异常捕获（修复后台线程崩溃杀死进程）；计划任务移除失败重启
-  （让位退出码非零会被误判为失败而重启叠加）。
+- Daily driving: forget it exists. Tune effects by opening iGC.Lite, then close Lite.
+- Tray exit = stop for real (watchdog paused, logon task untouched — run the setup
+  script again to re-enable everything, `remove_autostart.ps1` to uninstall fully).
+- `tools\关闭显示器.cmd` / `tools\turn-off-display.cmd`: manual screen-off helper for
+  testing the linkage without waiting for the idle timeout.
+
+## How it works
+
+1. `RegisterPowerSettingNotification` + a hidden message-only form receives
+   `GUID_CONSOLE_DISPLAY_STATE` events (Windows replays the current state at
+   registration, so startup always converges).
+2. Debounce state machine (500 ms tick): apply `SetLightingEffect(id, Sleep)` after the
+   display has been stably off, `InitLightingEffect()` after it is stably on.
+3. `iGC.Lite.Service.LED.LEDAPIService` is constructed by hand (its DI container is
+   internal — reflection fills `ConfigManager<T>` non-public constructors) and reused
+   exactly as the vendor's own UI does.
+
+## Hardware findings (empirical, BATTLE-AX B760M + iGC.Lite)
+
+Documented so the next person doesn't rediscover them the hard way:
+
+- **The MCU needs a resident pumper.** Any controlling process exit — ours *and the
+  vendor's Lite* — freezes the LEDs on the last frame. A clean `Uninit()` does not
+  bring back the boot-time default animation; only a reboot does. The BIOS default
+  rainbow runs before the first software init and never returns.
+- `SetLightingEffect` returns `UnknowError(1)` on success. Trust the fans, not the
+  HRESULT.
+- `SendMessage(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, -1)` ("force wake"
+  without input) makes Windows turn the display back off ~1.1 s later. On→Off pairs
+  in the log are Windows behavior, not daemon noise. Wake with real input to test.
+- LED writes echo fake power events; the one-way echo guard (ignore On-direction
+  events for 3 s after a lights-off write, never ignore Off) keeps the loop stable.
+  Cost: a genuine wake within 3 s of a lights-off write waits for the next event.
+
+## Limitations
+
+- Colorful-only: it borrows iGC.Lite's private stack; a vendor update can break it.
+- Covers display sleep, not system sleep/hibernate (fans may freeze mid-glow — the
+  hardware offers no off-at-suspend hook we've found).
+- Verified on one board model; other Colorful models may enumerate differently.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

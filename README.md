@@ -39,16 +39,17 @@
 | `RgbAuto.exe` | 守护程序本体（托盘图标，后台运行） |
 | `RgbAuto.cs` | 守护程序源代码（只含运行所需核心） |
 | `RgbAuto.Tests.exe` / `.cs` | 诊断/测试工具（不进守护流程，平时不用）：`listen` 只记录息屏事件；`test svc sleep 45` 单次推睡眠效果 45 秒等 |
-| `rgbrun.log` | 运行日志（息屏/亮屏事件、灯操作记录） |
-| `setup_autostart.ps1` | 注册开机自启（计划任务 "RGB Auto Off"，登录时静默启动） |
-| `remove_autostart.ps1` | 停用：删除计划任务并结束守护进程 |
+| `rgbrun.log` | 运行日志（息屏/亮屏事件、灯操作记录；超过 1 MB 自动轮转为 `rgbrun.log.1`） |
+| `watchdog.ps1` | 看门狗：发现没有守护实例在跑就拉起（由看门狗计划任务每 5 分钟执行） |
+| `setup_autostart.ps1` | 注册开机自启（计划任务 "RGB Auto Off" 登录启动 + "RGB Auto Off Watchdog" 每 5 分钟巡检） |
+| `remove_autostart.ps1` | 停用：删除两个计划任务并结束守护进程 |
 
 ## 常用操作
 
 - 手动启动：双击 `RgbAuto.exe`
-- 停止：托盘右键 → 退出；或任务管理器结束 `RgbAuto.exe`
+- 停止：托盘右键 → 退出；或任务管理器结束 `RgbAuto.exe`（**看门狗会在 5 分钟内自动拉起**——想长期停用请先运行 remove_autostart.ps1）
 - 开机自启：`powershell -ExecutionPolicy Bypass -File setup_autostart.ps1`
-- 停用自启：`powershell -ExecutionPolicy Bypass -File remove_autostart.ps1`
+- 停用自启：`powershell -ExecutionPolicy Bypass -File remove_autostart.ps1`（同时移除看门狗，停用后不会复活）
 
 ## 注意事项
 
@@ -70,6 +71,8 @@
 
 ## 版本记录
 
+- **2026-09-27**：日志超 1 MB 自动轮转（`rgbrun.log.1`）；新增看门狗计划任务
+  "RGB Auto Off Watchdog"（每 5 分钟巡检，守护不在跑就拉起；仅登录时运行）。
 - **2026-09-20**（`b8c1424`）：让位 spawn 失败重试 + 原地降级接管（不再出现零守护）；
   单向回声守卫修复"假亮屏事件导致熄屏后灯误亮/回环"。
 - **2026-09-20**（`71f4551` 初始提交）：命名互斥锁单实例守卫（修复多守护叠加写灯）；

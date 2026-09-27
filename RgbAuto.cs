@@ -58,11 +58,19 @@ namespace RgbAuto
 
     public static class Log
     {
+        const long MaxBytes = 1 * 1024 * 1024; // rotate to .1 when the log exceeds 1 MB
         static string file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "rgbrun.log");
         public static void W(string msg)
         {
             try
             {
+                var fi = new FileInfo(file);
+                if (fi.Exists && fi.Length > MaxBytes)
+                {
+                    string bak = file + ".1";
+                    File.Delete(bak);
+                    File.Move(file, bak);
+                }
                 File.AppendAllText(file, DateTime.Now.ToString("HH:mm:ss.fff") + " " + msg + "\r\n");
             }
             catch { }

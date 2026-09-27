@@ -298,12 +298,31 @@ namespace RgbAuto
             // 立即关灯
             var miOff = new ToolStripMenuItem("\u7acb\u5373\u5173\u706f");
             miOff.Click += delegate { ManualSet(DisplayState.Off); };
-            // 退出（停用看门狗后直接退出，灯保持当前状态不变；重新运行 setup_autostart.ps1 或手动启动即恢复）
+            // 退出（停用看门狗；灯亮时先把推流交给 iGC.Lite 让灯效继续流动，灯灭时直接退出）
             var miExit = new ToolStripMenuItem("\u9000\u51fa");
             miExit.Click += delegate
             {
-                Log.W("exit requested from tray; disabling watchdog, leaving lights as-is");
+                Log.W("exit requested from tray; disabling watchdog");
                 DisableWatchdog();
+                if (appliedState == DisplayState.On)
+                {
+                    // Lights need a resident pumper; exiting freezes them on the last frame.
+                    // Hand off to iGC.Lite, delayed ~2s so this process (which holds the LED
+                    // hardware) is gone before Lite initializes.
+                    try
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = "cmd.exe",
+                            Arguments = "/c timeout /t 2 >nul & start \"\" \"" + Path.Combine(Program.LiteDir, "iGC.Lite.exe") + "\"",
+                            WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
+                            CreateNoWindow = true,
+                            UseShellExecute = false
+                        });
+                        Log.W("handoff: iGC.Lite will resume pumping in ~2s");
+                    }
+                    catch (Exception ex) { Log.W("handoff to iGC.Lite failed: " + ex.Message + " (lights will freeze)"); }
+                }
                 Application.Exit();
             };
             menu.Items.Add(miRestore);

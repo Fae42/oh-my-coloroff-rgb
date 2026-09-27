@@ -15,12 +15,12 @@ Requires: Windows 10/11, a Colorful motherboard, and [iGC.Lite](https://www.colo
 ```powershell
 git clone https://github.com/Fae42/oh-my-coloroff-rgb
 cd oh-my-coloroff-rgb
-powershell -ExecutionPolicy Bypass -File setup_autostart.ps1   # autostart + watchdog
-.\RgbAuto.exe                                                   # or just re-login; done.
+powershell -ExecutionPolicy Bypass -File scripts\setup_autostart.ps1   # autostart + watchdog
+.\bin\RgbAuto.exe                                                   # or just re-login; done.
 ```
 
 No build needed — grab `RgbAuto.exe` from [Releases](../../releases) if you don't want to compile.
-Uninstall: `remove_autostart.ps1`, delete the folder.
+Uninstall: `scripts\remove_autostart.ps1`, delete the folder.
 
 ## Why
 
@@ -51,7 +51,7 @@ the LED service stack that ships with iGC.Lite (read-only; nothing under
 
 - Daily driving: forget it exists. Tune effects by opening iGC.Lite, then close Lite.
 - Tray **Exit** = stop for real (watchdog paused; logon task untouched — re-run the
-  setup script to re-enable, `remove_autostart.ps1` to uninstall fully).
+  setup script to re-enable, `scripts\remove_autostart.ps1` to uninstall fully).
 - `tools\turn-off-display.cmd`: manual screen-off helper for testing the linkage
   without waiting for the idle timeout.
 
@@ -83,11 +83,11 @@ Empirical hardware findings, architecture invariants, and vendor-stack caveats l
 No IDE needed:
 
 ```bat
-csc -nologo -platform:x64 -target:winexe -win32icon:assets\app.ico -out:RgbAuto.exe ^
+csc -nologo -platform:x64 -target:winexe -win32icon:assets\app.ico -out:bin\RgbAuto.exe ^
   "-r:C:\Program Files\iGC.Lite\iGameAPI.Contracts.dll" "-r:C:\Program Files\iGC.Lite\iGC.Lite.Service.dll" ^
   "-r:C:\Program Files\iGC.Lite\iGameCenter.ConfigManager.dll" "-r:C:\Program Files\iGC.Lite\Castle.Core.dll" ^
   "-r:C:\Program Files\iGC.Lite\iGameCenter.Hardware.dll" "-r:C:\Program Files\iGC.Lite\iGameCenter.Contracts.dll" ^
-  -r:System.dll -r:System.Windows.Forms.dll -r:System.Drawing.dll RgbAuto.cs
+  -r:System.dll -r:System.Windows.Forms.dll -r:System.Drawing.dll src\RgbAuto.cs
 ```
 
 ## License

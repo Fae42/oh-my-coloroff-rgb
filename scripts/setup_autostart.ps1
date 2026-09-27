@@ -1,7 +1,9 @@
-$wd  = Split-Path -Parent $MyInvocation.MyCommand.Path
-$exe = Join-Path $wd 'RgbAuto.exe'
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root  = Split-Path -Parent $scriptDir
+$bin   = Join-Path $root 'bin'
+$exe   = Join-Path $bin 'RgbAuto.exe'
 $user = [System.Environment]::UserName
-$action = New-ScheduledTaskAction -Execute $exe -WorkingDirectory $wd
+$action = New-ScheduledTaskAction -Execute $exe -WorkingDirectory $bin
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
 # No RestartCount: yield exits (5/6) are non-zero and would be misread as failure,
 # relaunching the daemon while iGC.Lite owns the hardware.
@@ -13,7 +15,7 @@ Register-ScheduledTask -TaskName 'RGB Auto Off' -Action $action -Trigger $trigge
 # A Once trigger with 5-min repetition (AtLogOn triggers can't carry Repetition here).
 # Interactive principal keeps it from firing while the user is logged off (the
 # daemon needs an interactive session).
-$wdScript = Join-Path $wd 'watchdog.ps1'
+$wdScript = Join-Path $scriptDir 'watchdog.ps1'
 $wdAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $wdScript + '"')
 $wdTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration ([TimeSpan]::FromDays(3650))
 Register-ScheduledTask -TaskName 'RGB Auto Off Watchdog' -Action $wdAction -Trigger $wdTrigger -Settings $settings -Principal $principal -Description 'Relaunch RGB Auto Off daemon every 5 min if not running' -Force | Out-Null

@@ -1,5 +1,5 @@
 // RGB Auto Off - diagnostic/test scaffolding (NOT part of the shipped daemon).
-// Compile: csc -nologo -platform:x64 -target:winexe -out:RgbAuto.Tests.exe -r:RgbAuto.exe <same refs as RgbAuto.cs> RgbAuto.Tests.cs
+// Compile (from repo root): csc -nologo -platform:x64 -target:winexe -out:bin\RgbAuto.Tests.exe -r:bin\RgbAuto.exe <same refs as RgbAuto.cs> src\RgbAuto.Tests.cs
 // Usage:
 //   RgbAuto.Tests.exe listen                - log display power events without touching LEDs
 //   RgbAuto.Tests.exe test svc sleep 45     - push Sleep effect for 45s, then restore

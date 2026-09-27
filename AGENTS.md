@@ -6,29 +6,29 @@ it records hard-won empirical facts that are not visible in the source.
 
 ## What this is
 
-A Windows tray daemon (~500-line `RgbAuto.cs`, .NET Framework 4.x, no IDE) that turns
+A Windows tray daemon (~500-line `src\RgbAuto.cs`, .NET Framework 4.x, no IDE) that turns
 Colorful (七彩虹) motherboard RGB fans off when the display sleeps and restores the
 saved effect on wake. It reuses the LED service stack that ships with the vendor's
 iGC.Lite (read-only) because OpenRGB does not support Colorful boards.
 
 ## Build & test
 
-Compile commands are in the header comment of `RgbAuto.cs`. The tests scaffolding is a
-separate assembly (`RgbAuto.Tests.cs` → `RgbAuto.Tests.exe`) and must stay out of the
+Compile commands are in the header comment of `src\RgbAuto.cs`. The tests scaffolding is a
+separate assembly (`src\RgbAuto.Tests.cs` → `bin\RgbAuto.Tests.exe`) and must stay out of the
 shipped daemon.
 
 ```powershell
-# diagnostics (Rgbrun.Tests.exe):
-.\RgbAuto.Tests.exe listen               # log display power events, no LED access
-.\RgbAuto.Tests.exe test svc sleep 45    # push Sleep for 45 s, then release the stack
-.\RgbAuto.Tests.exe test svc rainbow 30  # push Rainbow, then release
-.\RgbAuto.Tests.exe test probe           # LedDriver dump
-.\RgbAuto.Tests.exe test nprobe 20       # raw iGameMBoard.dll P/Invoke test (crashes on
-                                         # some driver states — treat results skeptically)
+# diagnostics (bin\RgbAuto.Tests.exe):
+.\bin\RgbAuto.Tests.exe listen               # log display power events, no LED access
+.\bin\RgbAuto.Tests.exe test svc sleep 45    # push Sleep for 45 s, then release the stack
+.\bin\RgbAuto.Tests.exe test svc rainbow 30  # push Rainbow, then release
+.\bin\RgbAuto.Tests.exe test probe           # LedDriver dump
+.\bin\RgbAuto.Tests.exe test nprobe 20       # raw iGameMBoard.dll P/Invoke test (crashes on
+                                             # some driver states — treat results skeptically)
 ```
 
-Verification workflow: `taskkill /IM RgbAuto.exe /F` before rebuilding (the exe is
-locked while running) → start `RgbAuto.exe` → check `rgbrun.log` → exercise with
+Verification workflow: `taskkill /IM bin\RgbAuto.exe /F` before rebuilding (the exe is
+locked while running) → start `bin\RgbAuto.exe` → check `bin\rgbrun.log` → exercise with
 `tools\turn-off-display.cmd` (screen off) and real mouse input (wake). Never verify a
 wake with `SC_MONITORPOWER -1` — see findings below.
 
@@ -44,7 +44,7 @@ wake with `SC_MONITORPOWER -1` — see findings below.
   use non-zero codes by design and a restart policy would fight iGC.Lite for hardware.
 - **The watchdog must only cover unexpected death**: tray Exit disables the
   `RGB Auto Off Watchdog` task (via `schtasks /Disable`, no elevation needed for own
-  tasks); `setup_autostart.ps1` re-enables it.
+  tasks); `scripts\setup_autostart.ps1` re-enables it.
 - **Debounce + one-way echo guard** are load-bearing. LED writes produce fake
   `GUID_CONSOLE_DISPLAY_STATE` events; the guard swallows On-direction events for 3 s
   after a lights-off write and NEVER ignores Off-direction ones.

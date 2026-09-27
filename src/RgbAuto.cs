@@ -1,6 +1,6 @@
 // RGB Auto Off daemon (shipped core).
-// Compile daemon:   csc -nologo -platform:x64 -target:winexe -out:RgbAuto.exe <refs below> RgbAuto.cs
-// Compile tests:    csc -nologo -platform:x64 -target:winexe -out:RgbAuto.Tests.exe -r:RgbAuto.exe <refs below> RgbAuto.Tests.cs
+// Compile daemon (from repo root):   csc -nologo -platform:x64 -target:winexe -win32icon:assets\app.ico -out:bin\RgbAuto.exe <refs below> src\RgbAuto.cs
+// Compile tests (from repo root):    csc -nologo -platform:x64 -target:winexe -out:bin\RgbAuto.Tests.exe -r:bin\RgbAuto.exe <refs below> src\RgbAuto.Tests.cs
 // refs: "-r:C:\Program Files\iGC.Lite\iGameAPI.Contracts.dll" "-r:C:\Program Files\iGC.Lite\iGC.Lite.Service.dll"
 //       "-r:C:\Program Files\iGC.Lite\iGameCenter.ConfigManager.dll" "-r:C:\Program Files\iGC.Lite\Castle.Core.dll"
 //       "-r:C:\Program Files\iGC.Lite\iGameCenter.Hardware.dll" "-r:C:\Program Files\iGC.Lite\iGameCenter.Contracts.dll"

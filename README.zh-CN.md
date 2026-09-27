@@ -14,12 +14,12 @@ Windows 托盘守护程序：把七彩虹（Colorful）主板 RGB 风扇的灯�
 ```powershell
 git clone https://github.com/Fae42/oh-my-coloroff-rgb
 cd oh-my-coloroff-rgb
-powershell -ExecutionPolicy Bypass -File setup_autostart.ps1   # 注册开机自启 + 看门狗
-.\RgbAuto.exe                                                   # 或直接重新登录；完成。
+powershell -ExecutionPolicy Bypass -File scripts\setup_autostart.ps1   # 注册开机自启 + 看门狗
+.\bin\RgbAuto.exe                                                   # 或直接重新登录；完成。
 ```
 
 不想编译就从 [Releases](../../releases) 下载编译好的 `RgbAuto.exe`。
-卸载：运行 `remove_autostart.ps1`，删除文件夹即可。
+卸载：运行 `scripts\remove_autostart.ps1`，删除文件夹即可。
 
 ## 为什么会有这个项目
 
@@ -43,7 +43,7 @@ RGB 风扇很炫——直到你离开座位，显示器都睡了，风扇还在�
 
 - 平时忘掉它的存在。想调灯效就打开 iGC.Lite，调完关掉即可。
 - 托盘"退出" = 真的停用（看门狗同时暂停；登录任务保留——重跑 setup 脚本即可恢复，
-  运行 `remove_autostart.ps1` 则完全卸载）。
+  运行 `scripts\remove_autostart.ps1` 则完全卸载）。
 - `tools\关闭显示器.cmd` / `turn-off-display.cmd`：手动熄屏小工具，不用等空闲超时就能测试联动。
 
 ## 工作原理
@@ -72,11 +72,11 @@ RGB 风扇很炫——直到你离开座位，显示器都睡了，风扇还在�
 无需 IDE：
 
 ```bat
-csc -nologo -platform:x64 -target:winexe -win32icon:assets\app.ico -out:RgbAuto.exe ^
+csc -nologo -platform:x64 -target:winexe -win32icon:assets\app.ico -out:bin\RgbAuto.exe ^
   "-r:C:\Program Files\iGC.Lite\iGameAPI.Contracts.dll" "-r:C:\Program Files\iGC.Lite\iGC.Lite.Service.dll" ^
   "-r:C:\Program Files\iGC.Lite\iGameCenter.ConfigManager.dll" "-r:C:\Program Files\iGC.Lite\Castle.Core.dll" ^
   "-r:C:\Program Files\iGC.Lite\iGameCenter.Hardware.dll" "-r:C:\Program Files\iGC.Lite\iGameCenter.Contracts.dll" ^
-  -r:System.dll -r:System.Windows.Forms.dll -r:System.Drawing.dll RgbAuto.cs
+  -r:System.dll -r:System.Windows.Forms.dll -r:System.Drawing.dll src\RgbAuto.cs
 ```
 
 ## 许可证

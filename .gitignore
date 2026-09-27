@@ -1,4 +1,4 @@
-# build outputs (rebuild via csc, command in RgbAuto.cs header)
+# build outputs + runtime log (machine-local; rebuild via csc, see src/RgbAuto.cs header)
+bin/
 *.exe
-# runtime log (append-only, machine-local)
 rgbrun.log

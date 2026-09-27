@@ -268,8 +268,14 @@ namespace RgbAuto
                     }
                     Log.W("watching " + secs + "s");
                     Thread.Sleep(secs * 1000);
-                    try { svc.InitLightingEffect(); Log.W("restored saved effect"); }
-                    catch (Exception ex) { Log.W("restore: " + ex.Message); }
+                    // Experiment: release the LED stack instead of restoring, then exit.
+                    // If the board reverts to its hardware default effect, the fans keep
+                    // flowing after this process exits (that's the tray-exit ideal).
+                    try { svc.StopLEDService(); Log.W("StopLEDService done"); }
+                    catch (Exception ex) { Log.W("StopLEDService: " + ex.Message); }
+                    try { var u = svc.Uninit(); Log.W("Uninit -> " + u + " (" + (int)u + ")"); }
+                    catch (Exception ex) { Log.W("Uninit: " + ex.Message); }
+                    Log.W("exiting; watch whether the fans keep flowing or freeze");
                 }
                 return 0;
             }

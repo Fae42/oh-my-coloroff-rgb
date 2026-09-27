@@ -298,11 +298,12 @@ namespace RgbAuto
             // 立即关灯
             var miOff = new ToolStripMenuItem("\u7acb\u5373\u5173\u706f");
             miOff.Click += delegate { ManualSet(DisplayState.Off); };
-            // 退出
+            // 退出（同时停用看门狗，守护保持关闭直到重新运行 setup_autostart.ps1 或手动启动）
             var miExit = new ToolStripMenuItem("\u9000\u51fa");
             miExit.Click += delegate
             {
-                Log.W("exit requested from tray; restoring effect before exit");
+                Log.W("exit requested from tray; disabling watchdog and restoring effect before exit");
+                DisableWatchdog();
                 try { drv.Restore(); } catch { }
                 Application.Exit();
             };
@@ -314,6 +315,27 @@ namespace RgbAuto
             trayIcon.BalloonTipTitle = "RGB Auto";
             trayIcon.BalloonTipText = "\u5b88\u62a4\u5df2\u542f\u52a8\uff0c\u53f3\u952e\u6258\u76d8\u56fe\u6807\u53ef\u64cd\u4f5c"; // 守护已启动，右键托盘图标可操作
             trayIcon.ShowBalloonTip(3000);
+        }
+
+        // Tray exit must not be resurrected: disable the watchdog task (fails open - we still exit).
+        // Only the tray path does this; yield/crash exits keep the watchdog alive on purpose.
+        static void DisableWatchdog()
+        {
+            const string task = "RGB Auto Off Watchdog";
+            try
+            {
+                var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "schtasks.exe",
+                    Arguments = "/Change /TN \"" + task + "\" /Disable",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
+                });
+                if (!p.WaitForExit(5000)) { try { p.Kill(); } catch { } Log.W("disable watchdog: schtasks timed out"); return; }
+                Log.W("disable watchdog: schtasks exit " + p.ExitCode + (p.ExitCode == 0 ? "" : " (watchdog will still relaunch the daemon)"));
+            }
+            catch (Exception ex) { Log.W("disable watchdog failed: " + ex.Message); }
         }
 
         void ManualSet(DisplayState target)

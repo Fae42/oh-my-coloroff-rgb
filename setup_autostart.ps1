@@ -16,5 +16,7 @@ Register-ScheduledTask -TaskName 'RGB Auto Off' -Action $action -Trigger $trigge
 $wdAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "D:\Software\Dev\RgbAuto\watchdog.ps1"'
 $wdTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration ([TimeSpan]::FromDays(3650))
 Register-ScheduledTask -TaskName 'RGB Auto Off Watchdog' -Action $wdAction -Trigger $wdTrigger -Settings $settings -Principal $principal -Description 'Relaunch RGB Auto Off daemon every 5 min if not running' -Force | Out-Null
+# Tray exit disables the watchdog; re-running setup must bring it back.
+Enable-ScheduledTask -TaskName 'RGB Auto Off Watchdog' -ErrorAction SilentlyContinue
 
 Get-ScheduledTask -TaskName 'RGB Auto Off*' | Select-Object TaskName, State

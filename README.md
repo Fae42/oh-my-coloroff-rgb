@@ -47,7 +47,7 @@
 ## 常用操作
 
 - 手动启动：双击 `RgbAuto.exe`
-- 停止：托盘右键 → 退出；或任务管理器结束 `RgbAuto.exe`（**看门狗会在 5 分钟内自动拉起**——想长期停用请先运行 remove_autostart.ps1）
+- 停止：托盘右键 → **退出**（退出时会自动恢复灯效**并停用看门狗**，守护保持关闭，不会再被自动拉起；重新运行 `setup_autostart.ps1` 或手动启动 `RgbAuto.exe` 即恢复看门狗）
 - 开机自启：`powershell -ExecutionPolicy Bypass -File setup_autostart.ps1`
 - 停用自启：`powershell -ExecutionPolicy Bypass -File remove_autostart.ps1`（同时移除看门狗，停用后不会复活）
 
@@ -71,6 +71,8 @@
 
 ## 版本记录
 
+- **2026-09-27**：托盘"退出"现在会同时停用看门狗任务（守护保持关闭直到重新启用）；
+  setup_autostart.ps1 重新注册时会自动恢复看门狗。
 - **2026-09-27**：日志超 1 MB 自动轮转（`rgbrun.log.1`）；新增看门狗计划任务
   "RGB Auto Off Watchdog"（每 5 分钟巡检，守护不在跑就拉起；仅登录时运行）。
 - **2026-09-20**（`b8c1424`）：让位 spawn 失败重试 + 原地降级接管（不再出现零守护）；

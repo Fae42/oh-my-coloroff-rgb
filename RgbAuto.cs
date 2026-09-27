@@ -298,13 +298,12 @@ namespace RgbAuto
             // 立即关灯
             var miOff = new ToolStripMenuItem("\u7acb\u5373\u5173\u706f");
             miOff.Click += delegate { ManualSet(DisplayState.Off); };
-            // 退出（同时停用看门狗，守护保持关闭直到重新运行 setup_autostart.ps1 或手动启动）
+            // 退出（停用看门狗后直接退出，灯保持当前状态不变；重新运行 setup_autostart.ps1 或手动启动即恢复）
             var miExit = new ToolStripMenuItem("\u9000\u51fa");
             miExit.Click += delegate
             {
-                Log.W("exit requested from tray; disabling watchdog and restoring effect before exit");
+                Log.W("exit requested from tray; disabling watchdog, leaving lights as-is");
                 DisableWatchdog();
-                try { drv.Restore(); } catch { }
                 Application.Exit();
             };
             menu.Items.Add(miRestore);

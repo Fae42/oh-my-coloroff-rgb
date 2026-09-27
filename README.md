@@ -47,7 +47,7 @@
 ## 常用操作
 
 - 手动启动：双击 `RgbAuto.exe`
-- 停止：托盘右键 → **退出**（退出时会自动恢复灯效**并停用看门狗**，守护保持关闭，不会再被自动拉起；重新运行 `setup_autostart.ps1` 或手动启动 `RgbAuto.exe` 即恢复看门狗）
+- 停止：托盘右键 → **退出**（停用看门狗后直接退出，灯保持退出时的状态不变；重新运行 `setup_autostart.ps1` 或手动启动 `RgbAuto.exe` 即恢复看门狗）
 - 开机自启：`powershell -ExecutionPolicy Bypass -File setup_autostart.ps1`
 - 停用自启：`powershell -ExecutionPolicy Bypass -File remove_autostart.ps1`（同时移除看门狗，停用后不会复活）
 

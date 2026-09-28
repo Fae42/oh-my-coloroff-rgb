@@ -103,8 +103,11 @@ or endorsed by Colorful; "Colorful", "iGC.Lite" and related marks belong to thei
 respective owners and are mentioned here only to describe compatibility.
 
 iGC.Lite's components are called read-only — nothing of the vendor's stack is modified
-or redistributed. If anything here infringes your rights, please open an issue; it will
-be dealt with promptly, up to taking the project down.
+or redistributed. This usage stays within iGC.Lite's own bundled License.txt, which
+permits free personal installation and use and prohibits only reverse engineering /
+decompilation and commercial use — none of which this project involves. If anything
+here infringes your rights, please open an issue; it will be dealt with promptly, up to
+taking the project down.
 
 ## License
 

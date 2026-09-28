@@ -340,19 +340,23 @@ namespace RgbAuto
             if (which == "svc")
                 return SvcMode.Run(args);
             var d = new LedDriver();
-            if (!d.Init()) return 1;
-            if (which == "nprobe")
-                return NativeMboard.Run(secs);
-            if (which == "probe")
+            try
             {
-                d.Probe();
+                if (!d.Init()) return 1;
+                if (which == "nprobe")
+                    return NativeMboard.Run(secs);
+                if (which == "probe")
+                {
+                    d.Probe();
+                    return 0;
+                }
+                d.Apply(which == "sleep" ? iGameEasyCalc_LEDType.Sleep : iGameEasyCalc_LEDType.Rainbow);
+                Log.W("test mode: " + which + " for " + secs + "s");
+                Thread.Sleep(secs * 1000);
+                Log.W("test done");
                 return 0;
             }
-            d.Apply(which == "sleep" ? iGameEasyCalc_LEDType.Sleep : iGameEasyCalc_LEDType.Rainbow);
-            Log.W("test mode: " + which + " for " + secs + "s");
-            Thread.Sleep(secs * 1000);
-            Log.W("test done");
-            return 0;
+            finally { d.Dispose(); }
         }
     }
 

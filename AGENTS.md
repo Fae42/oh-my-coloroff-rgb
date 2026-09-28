@@ -38,8 +38,10 @@ wake with `SC_MONITORPOWER -1` — see findings below.
   deferred instance). Duplicates exit 0.
 - **iGC.Lite handoff chain**: when Lite starts, the daemon spawns itself with
   `--deferred` and exits; the deferred instance polls until Lite exits, then becomes the
-  daemon. If spawn fails 3× before LED init, fall back to waiting in-process. Every exit
-  path must leave either a live daemon or a deferred waiter — never zero.
+  daemon. If spawn fails 3× before LED init, fall back to waiting in-process. Yield
+  handoffs never leave zero instances; the remaining exits (init blocked, no device,
+  spawn failure with LED live) leave zero by necessity, and the 5-minute watchdog is
+  what brings the daemon back once the condition clears.
 - **The logon scheduled task must NOT have a restart-on-failure count**: yield exits
   use non-zero codes by design and a restart policy would fight iGC.Lite for hardware.
 - **The watchdog must only cover unexpected death**: tray Exit disables the
@@ -47,7 +49,9 @@ wake with `SC_MONITORPOWER -1` — see findings below.
   tasks); `scripts\setup_autostart.ps1` re-enables it.
 - **Debounce + one-way echo guard** are load-bearing. LED writes produce fake
   `GUID_CONSOLE_DISPLAY_STATE` events; the guard swallows On-direction events for 3 s
-  after a lights-off write and NEVER ignores Off-direction ones.
+  after a lights-off write and NEVER ignores Off-direction ones. Manual tray actions
+  (restore / lights off) also set `rawState`, so the debounce timer keeps a manual
+  choice as the believed display state instead of reverting it.
 - Scripts derive the install dir from `$MyInvocation.MyCommand.Path` — keep them
   location-independent; no machine-specific paths in the repo.
 

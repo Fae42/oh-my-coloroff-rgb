@@ -114,7 +114,8 @@ def load_font(bold, size):
 f_title = load_font(True, 84)
 f_sub = load_font(False, 33)
 # CJK glyphs live only in YaHei — Segoe UI renders tofu
-f_cjk = ImageFont.truetype(r"C:\Windows\Fonts\msyhbd.ttc", S(30))
+f_cjk = ImageFont.truetype(r"C:\Windows\Fonts\msyhbd.ttc", S(30)) \
+    if os.path.exists(r"C:\Windows\Fonts\msyhbd.ttc") else load_font(True, 30)
 f_badge = load_font(False, 23)
 d = ImageDraw.Draw(bg, "RGBA")
 

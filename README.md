@@ -11,7 +11,7 @@
 
 前提：Windows 10/11、**七彩虹主板**、**已安装 [iGC.Lite](https://www.colorful.cn)**。
 
-**1. 下载** [`oh-my-coloroff-rgb-v1.0-win-x64.zip`](../../releases) 并解压到任意位置。
+**1. 下载** [`oh-my-coloroff-rgb-win-x64.zip`](../../releases)（最新 Release），解压到任意位置。
 
 **2. 安装**：在解压后的文件夹空白处右键 →「在终端中打开」（Windows 10：按住 Shift 右键
 →「在此处打开 PowerShell 窗口」），粘贴运行：
@@ -41,6 +41,7 @@ powershell -ExecutionPolicy Bypass -File scripts\setup_autostart.ps1
 ## 日常使用
 
 - 平时当它不存在。想调灯效就打开 iGC.Lite，调完关掉即可。
+- 托盘菜单的"恢复灯效 / 立即关灯"立即生效并保持，直到下一次屏幕状态变化。
 - 托盘"退出"是真的退出（不会再被自动拉起；开机自启任务保留——重跑 setup 脚本即恢复；
   运行 `scripts\remove_autostart.ps1` 则完全卸载）。
 - `tools\关闭显示器.cmd` / `turn-off-display.cmd`：手动熄屏小工具，不用等空闲超时就能测试联动。

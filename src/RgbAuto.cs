@@ -51,6 +51,7 @@ namespace RgbAuto
             if (m.Msg != WM_POWERBROADCAST || m.WParam.ToInt32() != PBT_POWERSETTINGCHANGE) return false;
             var st = (POWERBROADCAST_SETTING)Marshal.PtrToStructure(m.LParam, typeof(POWERBROADCAST_SETTING));
             if (st.PowerSetting != GUID_CONSOLE_DISPLAY_STATE) return false;
+            if (st.DataLength < 4) return false; // console display state payload is a DWORD
             state = (DisplayState)BitConverter.ToInt32(new byte[] { st.Data, 0, 0, 0 }, 0);
             return true;
         }
@@ -345,6 +346,10 @@ namespace RgbAuto
                 if (target == DisplayState.On) { drv.Restore(); Log.W("manual restore"); }
                 else { drv.Sleep(); Log.W("manual lights off"); }
                 appliedState = target;
+                // a manual choice becomes the believed display state, so the debounce
+                // timer keeps it instead of reverting to a stale rawState
+                rawState = target;
+                rawSince = DateTime.Now;
                 lastAction = DateTime.Now;
                 SetTrayIcon();
             }
@@ -419,18 +424,19 @@ namespace RgbAuto
                     if (sinceAction < RefractorySeconds) return; // refractory: LED writes can themselves trigger state events
                     if (rawState == DisplayState.Off && stable >= 1.5 && appliedState != DisplayState.Off)
                     {
+                        // driver first: on failure leave appliedState untouched so the next tick retries
+                        try { drv.Sleep(); } catch (Exception ex) { Log.W("sleep: " + ex.Message); return; }
                         appliedState = DisplayState.Off;
                         lastAction = DateTime.Now;
                         Log.W("stable " + rawState + " for " + stable.ToString("0.0") + "s -> lights off");
-                        try { drv.Sleep(); } catch (Exception ex) { Log.W("sleep: " + ex.Message); }
                         SetTrayIcon();
                     }
                     else if (rawState != DisplayState.Off && stable >= 1.0 && appliedState != DisplayState.On)
                     {
+                        try { drv.Restore(); } catch (Exception ex) { Log.W("restore: " + ex.Message); return; }
                         appliedState = DisplayState.On;
                         lastAction = DateTime.Now;
                         Log.W("stable " + rawState + " for " + stable.ToString("0.0") + "s -> lights restored");
-                        try { drv.Restore(); } catch (Exception ex) { Log.W("restore: " + ex.Message); }
                         SetTrayIcon();
                     }
                 }

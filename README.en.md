@@ -13,7 +13,8 @@ is restored.
 
 Requires Windows 10/11, a **Colorful motherboard**, and **[iGC.Lite](https://www.colorful.cn) installed**.
 
-**1. Download** [`oh-my-coloroff-rgb-v1.0-win-x64.zip`](../../releases) and extract it anywhere.
+**1. Download** [`oh-my-coloroff-rgb-win-x64.zip`](../../releases) (latest release) and
+extract it anywhere.
 
 **2. Install**: in the extracted folder, right-click empty space → **Open in Terminal**
 (Windows 10: Shift+right-click → *Open PowerShell window here*), then paste and run:
@@ -48,6 +49,8 @@ That's autostart at boot, plus auto-relaunch if the daemon ever dies.
 ## Usage
 
 - Daily driving: forget it exists. Tune effects by opening iGC.Lite, then close Lite.
+- Tray *Restore effect* / *Lights off* take effect immediately and stick until the next
+  display change.
 - Tray **Exit** = stop for real (no auto-relaunch afterwards; the autostart task stays —
   re-run the setup script to re-enable, `scripts\remove_autostart.ps1` to uninstall fully).
 - `tools\turn-off-display.cmd`: manual screen-off helper for testing without waiting

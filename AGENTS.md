@@ -48,6 +48,10 @@ wake with `SC_MONITORPOWER -1` — see findings below.
 - **The watchdog must only cover unexpected death**: tray Exit disables the
   `RGB Auto Off Watchdog` task (via `schtasks /Disable`, no elevation needed for own
   tasks); `scripts\setup_autostart.ps1` re-enables it.
+- **The watchdog task action must stay windowless**: it fires every 5 minutes, and a
+  direct `powershell.exe` action flashes a console window even with `-WindowStyle
+  Hidden` (the flash steals focus from fullscreen apps). Route the task through
+  `scripts\watchdog.vbs` (wscript) — never point it at powershell.exe directly.
 - **Debounce + one-way echo guard** are load-bearing. The decision logic lives in the
   pure `Debounce` class (unit-tested by `selftest`; `MainForm` only adapts it to WinForms
   events and the LED driver). LED writes produce fake `GUID_CONSOLE_DISPLAY_STATE`

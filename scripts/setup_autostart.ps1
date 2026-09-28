@@ -15,8 +15,11 @@ Register-ScheduledTask -TaskName 'RGB Auto Off' -Action $action -Trigger $trigge
 # A Once trigger with 5-min repetition (AtLogOn triggers can't carry Repetition here).
 # Interactive principal keeps it from firing while the user is logged off (the
 # daemon needs an interactive session).
-$wdScript = Join-Path $scriptDir 'watchdog.ps1'
-$wdAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $wdScript + '"')
+# The task action must go through watchdog.vbs (wscript): a direct powershell.exe
+# action flashes a console window even with -WindowStyle Hidden, which steals
+# focus from fullscreen games.
+$wdScript = Join-Path $scriptDir 'watchdog.vbs'
+$wdAction = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ('//nologo "' + $wdScript + '"')
 $wdTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration ([TimeSpan]::FromDays(3650))
 Register-ScheduledTask -TaskName 'RGB Auto Off Watchdog' -Action $wdAction -Trigger $wdTrigger -Settings $settings -Principal $principal -Description 'Relaunch RGB Auto Off daemon every 5 min if not running' -Force | Out-Null
 # Tray exit disables the watchdog; re-running setup must bring it back.

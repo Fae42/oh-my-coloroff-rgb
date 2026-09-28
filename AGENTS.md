@@ -33,6 +33,13 @@ locked while running) → start `bin\RgbAuto.exe` → check `bin\rgbrun.log` →
 `tools\turn-off-display.cmd` (screen off) and real mouse input (wake). Never verify a
 wake with `SC_MONITORPOWER -1` — see findings below.
 
+## Releasing
+
+Releases are created via the GitHub REST API (no `gh` CLI on this machine; token via
+`git credential fill`, in-memory only). Keep release notes short and reader-facing:
+what changed for the user, upgrade notes, SHA256. Internal details (class names,
+refactors, test scaffolding) belong in commit messages, not in the notes.
+
 ## Architecture invariants (do not break)
 
 - **Single instance** via named mutex `Local\RgbAutoDaemon.SingleInstance` (daemon AND

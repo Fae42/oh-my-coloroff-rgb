@@ -6,7 +6,7 @@ it records hard-won empirical facts that are not visible in the source.
 
 ## What this is
 
-A Windows tray daemon (~500-line `src\RgbAuto.cs`, .NET Framework 4.x, no IDE) that turns
+A Windows tray daemon (~620-line `src\RgbAuto.cs`, .NET Framework 4.x, no IDE) that turns
 Colorful (七彩虹) motherboard RGB fans off when the display sleeps and restores the
 saved effect on wake. It reuses the LED service stack that ships with the vendor's
 iGC.Lite (read-only) because OpenRGB does not support Colorful boards.
@@ -19,6 +19,7 @@ shipped daemon.
 
 ```powershell
 # diagnostics (bin\RgbAuto.Tests.exe):
+.\bin\RgbAuto.Tests.exe selftest             # pure-logic debounce state-machine tests (no hardware)
 .\bin\RgbAuto.Tests.exe listen               # log display power events, no LED access
 .\bin\RgbAuto.Tests.exe test svc sleep 45    # push Sleep for 45 s, then release the stack
 .\bin\RgbAuto.Tests.exe test svc rainbow 30  # push Rainbow, then release
@@ -47,11 +48,13 @@ wake with `SC_MONITORPOWER -1` — see findings below.
 - **The watchdog must only cover unexpected death**: tray Exit disables the
   `RGB Auto Off Watchdog` task (via `schtasks /Disable`, no elevation needed for own
   tasks); `scripts\setup_autostart.ps1` re-enables it.
-- **Debounce + one-way echo guard** are load-bearing. LED writes produce fake
-  `GUID_CONSOLE_DISPLAY_STATE` events; the guard swallows On-direction events for 3 s
-  after a lights-off write and NEVER ignores Off-direction ones. Manual tray actions
-  (restore / lights off) also set `rawState`, so the debounce timer keeps a manual
-  choice as the believed display state instead of reverting it.
+- **Debounce + one-way echo guard** are load-bearing. The decision logic lives in the
+  pure `Debounce` class (unit-tested by `selftest`; `MainForm` only adapts it to WinForms
+  events and the LED driver). LED writes produce fake `GUID_CONSOLE_DISPLAY_STATE`
+  events; the guard swallows On-direction events for 3 s after a lights-off write and
+  NEVER ignores Off-direction ones. Manual tray actions (restore / lights off) go through
+  `Debounce.Manual`, so a manual choice becomes the believed display state instead of
+  being reverted by the timer.
 - Scripts derive the install dir from `$MyInvocation.MyCommand.Path` — keep them
   location-independent; no machine-specific paths in the repo.
 

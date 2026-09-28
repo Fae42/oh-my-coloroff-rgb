@@ -1,6 +1,7 @@
 // RGB Auto Off - diagnostic/test scaffolding (NOT part of the shipped daemon).
 // Compile (from repo root): csc -nologo -platform:x64 -target:winexe -out:bin\RgbAuto.Tests.exe -r:bin\RgbAuto.exe <same refs as RgbAuto.cs> src\RgbAuto.Tests.cs
 // Usage:
+//   RgbAuto.Tests.exe selftest              - pure-logic tests for the debounce state machine (no hardware)
 //   RgbAuto.Tests.exe listen                - log display power events without touching LEDs
 //   RgbAuto.Tests.exe test svc sleep 45     - push Sleep effect for 45s, then restore
 //   RgbAuto.Tests.exe test svc rainbow 30   - push Rainbow for 30s, then restore
@@ -360,6 +361,91 @@ namespace RgbAuto
         }
     }
 
+    // Pure-logic self tests for the daemon's debounce/echo-guard state machine.
+    // No hardware, no message loop; run: RgbAuto.Tests.exe selftest
+    internal static class SelfTest
+    {
+        static int failures;
+        static void Check(bool cond, string name)
+        {
+            Console.WriteLine((cond ? "PASS  " : "FAIL  ") + name);
+            if (!cond) failures++;
+        }
+
+        [DllImport("kernel32.dll")] static extern bool AttachConsole(int dwProcessId);
+
+        public static int Run()
+        {
+            AttachConsole(-1); // winexe has no console; attach to the caller's
+            var t0 = new DateTime(2026, 1, 1);
+            Debounce d;
+
+            // --- normal screen-off path ---
+            d = new Debounce(t0);
+            Check(d.OnEvent(DisplayState.Off, t0.AddHours(1)) == EventResult.Accepted, "off event accepted");
+            Check(d.Tick(t0.AddHours(1).AddSeconds(1.4)) == LedAction.None, "no write before off is stable 1.5s");
+            Check(d.Tick(t0.AddHours(1).AddSeconds(1.6)) == LedAction.Sleep, "sleep once off is stable 1.5s");
+            d.Commit(LedAction.Sleep, t0.AddHours(1).AddSeconds(1.6));
+            Check(d.Tick(t0.AddHours(1).AddSeconds(30)) == LedAction.None, "no duplicate sleep after commit");
+
+            // --- normal wake path ---
+            d = new Debounce(t0);
+            d.OnEvent(DisplayState.Off, t0.AddHours(1));
+            d.Commit(LedAction.Sleep, t0.AddHours(1).AddSeconds(2));
+            Check(d.OnEvent(DisplayState.On, t0.AddHours(1).AddSeconds(6)) == EventResult.Accepted, "wake accepted past refractory");
+            Check(d.Tick(t0.AddHours(1).AddSeconds(6.9)) == LedAction.None, "no restore before on is stable 1.0s");
+            Check(d.Tick(t0.AddHours(1).AddSeconds(7.1)) == LedAction.Restore, "restore once on is stable 1.0s");
+
+            // --- echo guard: on-direction swallowed within 3s of a lights-off write ---
+            d = new Debounce(t0);
+            d.OnEvent(DisplayState.Off, t0.AddHours(1));
+            d.Commit(LedAction.Sleep, t0.AddHours(1).AddSeconds(2));
+            Check(d.OnEvent(DisplayState.On, t0.AddHours(1).AddSeconds(3.2)) == EventResult.Swallowed, "on event inside refractory swallowed");
+            Check(d.RawState == DisplayState.Off, "raw state stays off after a swallowed wake");
+            Check(d.Tick(t0.AddHours(1).AddSeconds(30)) == LedAction.None, "no spurious restore after swallowed wake");
+
+            // --- regression: manual tray restore sticks after a swallowed wake ---
+            d.Manual(DisplayState.On, t0.AddHours(1).AddSeconds(40));
+            Check(d.AppliedState == DisplayState.On && d.RawState == DisplayState.On, "manual restore syncs believed state");
+            Check(d.Tick(t0.AddHours(1).AddSeconds(50)) == LedAction.None, "timer does not undo a manual restore");
+
+            // --- off-direction events are never swallowed ---
+            d = new Debounce(t0);
+            d.Commit(LedAction.Restore, t0.AddHours(1));
+            Check(d.OnEvent(DisplayState.Off, t0.AddHours(1).AddSeconds(0.5)) == EventResult.Accepted, "off event accepted even inside refractory");
+
+            // --- refractory blocks tick writes after any commit ---
+            d.OnEvent(DisplayState.Off, t0.AddHours(1).AddSeconds(0.6));
+            Check(d.Tick(t0.AddHours(1).AddSeconds(2.2)) == LedAction.None, "tick blocked by refractory after a write");
+            Check(d.Tick(t0.AddHours(1).AddSeconds(3.2)) == LedAction.Sleep, "tick allowed again after refractory");
+
+            // --- manual lights-off sticks while the screen is on ---
+            d = new Debounce(t0);
+            d.Manual(DisplayState.Off, t0.AddHours(1));
+            Check(d.Tick(t0.AddHours(1).AddSeconds(30)) == LedAction.None, "timer does not undo a manual lights-off");
+
+            // --- failed write (no commit) retries on the next tick ---
+            d = new Debounce(t0);
+            d.OnEvent(DisplayState.Off, t0.AddHours(1));
+            Check(d.Tick(t0.AddHours(1).AddSeconds(2)) == LedAction.Sleep, "sleep suggested");
+            Check(d.Tick(t0.AddHours(1).AddSeconds(3)) == LedAction.Sleep, "uncommitted write retried next tick");
+
+            // --- dim counts as on-direction ---
+            d = new Debounce(t0);
+            d.OnEvent(DisplayState.Off, t0.AddHours(1));
+            d.Commit(LedAction.Sleep, t0.AddHours(1).AddSeconds(2));
+            Check(d.OnEvent(DisplayState.Dim, t0.AddHours(1).AddSeconds(6)) == EventResult.Accepted, "dim accepted past refractory");
+            Check(d.Tick(t0.AddHours(1).AddSeconds(7.1)) == LedAction.Restore, "dim restores like on");
+
+            // --- same-state event is a no-op ---
+            Check(new Debounce(t0).OnEvent(DisplayState.On, t0.AddHours(1)) == EventResult.NoChange, "same-state event is no-change");
+
+            Console.WriteLine(failures == 0 ? "\r\nALL PASS" : "\r\n" + failures + " FAILURES");
+            Console.Out.Flush();
+            return failures == 0 ? 0 : 1;
+        }
+    }
+
     internal class TestProgram
     {
         [STAThread]
@@ -373,9 +459,11 @@ namespace RgbAuto
                 Application.Run(new ListenerForm());
                 return 0;
             }
+            if (args.Length > 0 && args[0] == "selftest")
+                return SelfTest.Run();
             if (args.Length == 0 || args[0] != "test")
             {
-                Console.WriteLine("usage: RgbAuto.Tests.exe listen | test svc sleep 45 | test svc rainbow 30 | test probe | test nprobe 20 | test sleep 30 | test rainbow 30");
+                Console.WriteLine("usage: RgbAuto.Tests.exe selftest | listen | test svc sleep 45 | test svc rainbow 30 | test probe | test nprobe 20 | test sleep 30 | test rainbow 30");
                 return 2;
             }
             return TestMode.Run(args);

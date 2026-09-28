@@ -57,6 +57,78 @@ namespace RgbAuto
         }
     }
 
+    public enum LedAction { None, Sleep, Restore }
+    public enum EventResult { Accepted, NoChange, Swallowed }
+
+    // Pure debounce + one-way echo-guard decision logic (no hardware, no message loop).
+    // MainForm adapts this to WinForms events and the LED driver; RgbAuto.Tests' selftest
+    // mode drives it directly. Semantics:
+    // - Off must hold 1.5 s before Sleep; On-direction 1.0 s before Restore.
+    // - After each committed LED write there is a 3 s refractory window. LED writes produce
+    //   fake GUID_CONSOLE_DISPLAY_STATE events, so On-direction events are swallowed while
+    //   the believed applied state is Off — answering a Sleep write's own "On" echo would
+    //   resurrect the lights with the display off and re-arm the write/echo loop. Off
+    //   events are NEVER swallowed: lights-on-with-display-off defeats the product's
+    //   purpose, and a wrongly accepted Off only parks the lights in the safe direction.
+    //   Cost: a genuine wake within 3 s of a lights-off write is missed until the next
+    //   transition or a manual tray action (which now sticks — see Manual).
+    // - Tick never mutates state; the caller writes and then reports success via Commit,
+    //   so a failed write is retried on the next tick.
+    public sealed class Debounce
+    {
+        public const double RefractorySeconds = 3.0;
+        const double OffStableSeconds = 1.5;
+        const double OnStableSeconds = 1.0;
+
+        public DisplayState RawState { get; private set; }      // last accepted display state
+        public DisplayState AppliedState { get; private set; }  // state last pushed to the LEDs
+        public DateTime RawSince { get; private set; }          // since when RawState has held
+        DateTime lastAction;                                    // last committed LED write
+
+        public Debounce(DateTime now)
+        {
+            RawState = AppliedState = DisplayState.On;
+            RawSince = lastAction = now;
+        }
+
+        public EventResult OnEvent(DisplayState state, DateTime now)
+        {
+            if (state == RawState) return EventResult.NoChange;
+            double sinceAction = (now - lastAction).TotalSeconds;
+            if (sinceAction < RefractorySeconds && state != DisplayState.Off && AppliedState == DisplayState.Off)
+                return EventResult.Swallowed; // probable echo of the Sleep write
+            RawState = state;
+            RawSince = now;
+            return EventResult.Accepted;
+        }
+
+        public LedAction Tick(DateTime now)
+        {
+            if ((now - lastAction).TotalSeconds < RefractorySeconds) return LedAction.None;
+            double stable = (now - RawSince).TotalSeconds;
+            if (RawState == DisplayState.Off && stable >= OffStableSeconds && AppliedState != DisplayState.Off)
+                return LedAction.Sleep;
+            if (RawState != DisplayState.Off && stable >= OnStableSeconds && AppliedState != DisplayState.On)
+                return LedAction.Restore;
+            return LedAction.None;
+        }
+
+        public void Commit(LedAction action, DateTime now)
+        {
+            AppliedState = action == LedAction.Sleep ? DisplayState.Off : DisplayState.On;
+            lastAction = now;
+        }
+
+        // A manual tray choice becomes the believed display state, so the debounce timer
+        // keeps it instead of reverting to a stale raw state.
+        public void Manual(DisplayState target, DateTime now)
+        {
+            AppliedState = target;
+            RawState = target;
+            RawSince = lastAction = now;
+        }
+    }
+
     public static class Log
     {
         const long MaxBytes = 1 * 1024 * 1024; // rotate to .1 when the log exceeds 1 MB
@@ -205,13 +277,7 @@ namespace RgbAuto
         bool ledInitialized; // true once the LED stack is live (drives the spawn-failure fallback)
         NotifyIcon trayIcon;
         Icon iconOn, iconOff; // cached; created once, destroyed on close
-        // after each LED write: no further writes, and On-direction events are echo-guarded
-        const double RefractorySeconds = 3.0;
-        // debounce state
-        DisplayState rawState = DisplayState.On;  // last reported display state
-        DateTime rawSince = DateTime.Now;         // since when it has held
-        DisplayState appliedState = DisplayState.On; // state we last pushed to the LEDs
-        DateTime lastAction = DateTime.Now;
+        Debounce deb; // debounce/echo-guard decisions; created in OnLoad, unit-tested via selftest
         System.Windows.Forms.Timer tmr;
 
         public MainForm()
@@ -345,12 +411,7 @@ namespace RgbAuto
             {
                 if (target == DisplayState.On) { drv.Restore(); Log.W("manual restore"); }
                 else { drv.Sleep(); Log.W("manual lights off"); }
-                appliedState = target;
-                // a manual choice becomes the believed display state, so the debounce
-                // timer keeps it instead of reverting to a stale rawState
-                rawState = target;
-                rawSince = DateTime.Now;
-                lastAction = DateTime.Now;
+                deb.Manual(target, DateTime.Now);
                 SetTrayIcon();
             }
             catch (Exception ex) { Log.W("manual: " + ex.Message); }
@@ -359,7 +420,7 @@ namespace RgbAuto
         void SetTrayIcon()
         {
             if (trayIcon == null || iconOn == null || iconOff == null) return;
-            try { trayIcon.Icon = (appliedState == DisplayState.On) ? iconOn : iconOff; } catch { }
+            try { trayIcon.Icon = (deb.AppliedState == DisplayState.On) ? iconOn : iconOff; } catch { }
         }
 
         static System.Drawing.Icon MakeIcon(bool on)
@@ -404,13 +465,12 @@ namespace RgbAuto
                 Environment.Exit(Program.ExitNoDevice);
             }
             ledInitialized = true;
+            deb = new Debounce(DateTime.Now);
             Guid g = Native.GUID_CONSOLE_DISPLAY_STATE;
             regHandle = Native.RegisterPowerSettingNotification(Handle, ref g, Native.DEVICE_NOTIFY_WINDOW_HANDLE);
             Log.W("registered display-state notify, handle=" + regHandle);
             // initial state: display is on -> apply configured effect
             drv.Restore();
-            appliedState = DisplayState.On;
-            lastAction = DateTime.Now;
 
             // debounce timer: apply LED state only when display state is stable
             tmr = new System.Windows.Forms.Timer();
@@ -419,26 +479,18 @@ namespace RgbAuto
             {
                 try
                 {
-                    double stable = (DateTime.Now - rawSince).TotalSeconds;
-                    double sinceAction = (DateTime.Now - lastAction).TotalSeconds;
-                    if (sinceAction < RefractorySeconds) return; // refractory: LED writes can themselves trigger state events
-                    if (rawState == DisplayState.Off && stable >= 1.5 && appliedState != DisplayState.Off)
+                    var now = DateTime.Now;
+                    var action = deb.Tick(now);
+                    if (action == LedAction.None) return;
+                    try
                     {
-                        // driver first: on failure leave appliedState untouched so the next tick retries
-                        try { drv.Sleep(); } catch (Exception ex) { Log.W("sleep: " + ex.Message); return; }
-                        appliedState = DisplayState.Off;
-                        lastAction = DateTime.Now;
-                        Log.W("stable " + rawState + " for " + stable.ToString("0.0") + "s -> lights off");
-                        SetTrayIcon();
+                        if (action == LedAction.Sleep) drv.Sleep(); else drv.Restore();
                     }
-                    else if (rawState != DisplayState.Off && stable >= 1.0 && appliedState != DisplayState.On)
-                    {
-                        try { drv.Restore(); } catch (Exception ex) { Log.W("restore: " + ex.Message); return; }
-                        appliedState = DisplayState.On;
-                        lastAction = DateTime.Now;
-                        Log.W("stable " + rawState + " for " + stable.ToString("0.0") + "s -> lights restored");
-                        SetTrayIcon();
-                    }
+                    catch (Exception ex) { Log.W("tick write failed, will retry next tick: " + ex.Message); return; }
+                    deb.Commit(action, now);
+                    double stable = (now - deb.RawSince).TotalSeconds;
+                    Log.W("stable " + deb.RawState + " for " + stable.ToString("0.0") + "s -> " + (action == LedAction.Sleep ? "lights off" : "lights restored"));
+                    SetTrayIcon();
                 }
                 catch (Exception ex) { Log.W("tick: " + ex.Message); }
             };
@@ -469,27 +521,8 @@ namespace RgbAuto
             if (Native.TryDecodeDisplayState(ref m, out state))
             {
                 Log.W("display state -> " + state);
-                if (state != rawState)
-                {
-                    double sinceAction = (DateTime.Now - lastAction).TotalSeconds;
-                    // One-way echo guard: a Sleep write can echo back a spurious "On" within the
-                    // refractory window; answering it would resurrect the lights while the display
-                    // is off and re-arm the write/echo loop, so swallow it. Off events are NEVER
-                    // ignored — lights-on-with-display-off defeats the product's purpose, and a
-                    // wrongly accepted Off only parks the lights in the safe direction. Costs:
-                    // a genuine wake within 3s of a lights-off write is missed until the next
-                    // transition (tray "恢复灯效" covers it), and a Restore write's own Off echo is
-                    // accepted, parking lights off — both fail safe.
-                    if (sinceAction < RefractorySeconds && state != DisplayState.Off && appliedState == DisplayState.Off)
-                    {
-                        Log.W("ignored (probable echo of Sleep write, " + sinceAction.ToString("0.0") + "s ago)");
-                    }
-                    else
-                    {
-                        rawState = state;
-                        rawSince = DateTime.Now;
-                    }
-                }
+                if (deb.OnEvent(state, DateTime.Now) == EventResult.Swallowed)
+                    Log.W("ignored (probable echo of Sleep write)");
             }
             base.WndProc(ref m);
         }

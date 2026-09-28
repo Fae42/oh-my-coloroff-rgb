@@ -1,6 +1,9 @@
-![banner](assets/banner.png)
-
-English | [简体中文](README.md)
+<p align="center">
+  <img src="assets/banner.png" alt="oh-my-coloroff-rgb banner">
+</p>
+<p align="center">
+  English | <a href="README.md">简体中文</a>
+</p>
 
 **Screen off → lights off. Screen on → lights back.**
 

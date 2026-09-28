@@ -1,6 +1,9 @@
-![banner](assets/banner.png)
-
-简体中文 | [English](README.en.md)
+<p align="center">
+  <img src="assets/banner.png" alt="oh-my-coloroff-rgb banner">
+</p>
+<p align="center">
+  简体中文 | <a href="README.en.md">English</a>
+</p>
 
 **屏幕熄灭 → 灯灭。屏幕点亮 → 灯效回来。**
 

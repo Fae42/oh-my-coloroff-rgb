@@ -20,6 +20,7 @@ shipped daemon.
 ```powershell
 # diagnostics (bin\RgbAuto.Tests.exe):
 .\bin\RgbAuto.Tests.exe selftest             # pure-logic debounce state-machine tests (no hardware)
+.\bin\RgbAuto.Tests.exe wincheck             # assert the running daemon has no visible window
 .\bin\RgbAuto.Tests.exe listen               # log display power events, no LED access
 .\bin\RgbAuto.Tests.exe test svc sleep 45    # push Sleep for 45 s, then release the stack
 .\bin\RgbAuto.Tests.exe test svc rainbow 30  # push Rainbow, then release
@@ -59,6 +60,13 @@ refactors, test scaffolding) belong in commit messages, not in the notes.
   direct `powershell.exe` action flashes a console window even with `-WindowStyle
   Hidden` (the flash steals focus from fullscreen apps). Route the task through
   `scripts\watchdog.vbs` (wscript) — never point it at powershell.exe directly.
+- **The daemon window is never shown**: `CreateParams` strips WS_VISIBLE and
+  `SetVisibleCore` denies every show (a shown form is a blank white box in Alt+Tab;
+  minimizing is not enough — launchers can hijack the first ShowWindow). `Load` never
+  fires, so the `MainForm` ctor creates the handle and runs init directly, and the tray
+  Exit handler calls `CleanupOnExit()` itself (a never-shown form is not in OpenForms, so
+  `Application.Exit` would skip `OnFormClosing` and leak the tray icon). Verify with
+  `bin\RgbAuto.Tests.exe wincheck` against a running daemon.
 - **Debounce + one-way echo guard** are load-bearing. The decision logic lives in the
   pure `Debounce` class (unit-tested by `selftest`; `MainForm` only adapts it to WinForms
   events and the LED driver). LED writes produce fake `GUID_CONSOLE_DISPLAY_STATE`

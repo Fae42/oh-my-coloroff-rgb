@@ -283,8 +283,27 @@ namespace RgbAuto
         public MainForm()
         {
             ShowInTaskbar = false;
-            WindowState = FormWindowState.Minimized;
-            Load += OnLoad;
+            // This window must never be shown: shown, it is a blank white box in Alt+Tab.
+            // Born without WS_VISIBLE (CreateParams below) and SetVisibleCore denies every
+            // show, so Load never fires — init here.
+            CreateHandle();
+            OnLoad(this, EventArgs.Empty);
+        }
+
+        // Tray-only app: the form exists only to host the message loop and power notifications.
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.Style &= ~0x10000000; // WS_VISIBLE
+                return cp;
+            }
+        }
+
+        protected override void SetVisibleCore(bool value)
+        {
+            base.SetVisibleCore(false);
         }
 
         public static bool LiteRunning()
@@ -371,6 +390,9 @@ namespace RgbAuto
             {
                 Log.W("exit requested from tray; disabling watchdog, leaving lights as-is");
                 DisableWatchdog();
+                // a never-shown form is not in OpenForms, so Application.Exit alone
+                // would skip OnFormClosing and leak the tray icon
+                CleanupOnExit();
                 Application.Exit();
             };
             menu.Items.Add(miRestore);
@@ -527,11 +549,16 @@ namespace RgbAuto
             base.WndProc(ref m);
         }
 
-        protected override void OnFormClosing(FormClosingEventArgs e)
+        void CleanupOnExit()
         {
-            if (regHandle != IntPtr.Zero) Native.UnregisterPowerSettingNotification(regHandle);
+            if (regHandle != IntPtr.Zero) { Native.UnregisterPowerSettingNotification(regHandle); regHandle = IntPtr.Zero; }
             if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); trayIcon = null; }
             DisposeIcons();
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            CleanupOnExit();
             base.OnFormClosing(e);
         }
     }

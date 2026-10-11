@@ -2,12 +2,14 @@
 // Compile (from repo root): csc -nologo -platform:x64 -target:winexe -out:bin\RgbAuto.Tests.exe -r:bin\RgbAuto.exe <same refs as RgbAuto.cs> src\RgbAuto.Tests.cs
 // Usage:
 //   RgbAuto.Tests.exe selftest              - pure-logic tests for the debounce state machine (no hardware)
+//   RgbAuto.Tests.exe wincheck              - assert no RgbAuto.exe window is visible (needs a running daemon)
 //   RgbAuto.Tests.exe listen                - log display power events without touching LEDs
 //   RgbAuto.Tests.exe test svc sleep 45     - push Sleep effect for 45s, then restore
 //   RgbAuto.Tests.exe test svc rainbow 30   - push Rainbow for 30s, then restore
 //   RgbAuto.Tests.exe test probe            - LedDriver probe dump
 //   RgbAuto.Tests.exe test nprobe 20        - raw iGameMBoard.dll direct test
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -446,6 +448,47 @@ namespace RgbAuto
         }
     }
 
+    // Integration check: the daemon's form must never be visible (a visible form shows up
+    // in Alt+Tab as a blank white window). Requires a running RgbAuto.exe.
+    internal static class WinCheck
+    {
+        delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
+        [DllImport("kernel32.dll")] static extern bool AttachConsole(int dwProcessId);
+        [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr lParam);
+        [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hWnd);
+        [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out int pid);
+
+        public static int Run()
+        {
+            AttachConsole(-1); // winexe has no console; attach to the caller's
+            var pids = new HashSet<int>();
+            foreach (var p in System.Diagnostics.Process.GetProcessesByName("RgbAuto")) pids.Add(p.Id);
+            if (pids.Count == 0)
+            {
+                Console.WriteLine("FAIL  no RgbAuto process running");
+                Console.Out.Flush();
+                return 1;
+            }
+            int total = 0, visible = 0;
+            EnumProc cb = delegate(IntPtr hWnd, IntPtr lParam)
+            {
+                int pid;
+                GetWindowThreadProcessId(hWnd, out pid);
+                if (!pids.Contains(pid)) return true;
+                total++;
+                if (IsWindowVisible(hWnd)) { visible++; Console.WriteLine("FAIL  visible window hwnd=" + hWnd + " pid=" + pid); }
+                return true;
+            };
+            EnumWindows(cb, IntPtr.Zero);
+            GC.KeepAlive(cb);
+            Console.WriteLine(visible == 0
+                ? "PASS  " + pids.Count + " daemon process(es), " + total + " window(s), none visible"
+                : visible + " visible window(s) across " + total);
+            Console.Out.Flush();
+            return visible == 0 ? 0 : 1;
+        }
+    }
+
     internal class TestProgram
     {
         [STAThread]
@@ -461,9 +504,11 @@ namespace RgbAuto
             }
             if (args.Length > 0 && args[0] == "selftest")
                 return SelfTest.Run();
+            if (args.Length > 0 && args[0] == "wincheck")
+                return WinCheck.Run();
             if (args.Length == 0 || args[0] != "test")
             {
-                Console.WriteLine("usage: RgbAuto.Tests.exe selftest | listen | test svc sleep 45 | test svc rainbow 30 | test probe | test nprobe 20 | test sleep 30 | test rainbow 30");
+                Console.WriteLine("usage: RgbAuto.Tests.exe selftest | wincheck | listen | test svc sleep 45 | test svc rainbow 30 | test probe | test nprobe 20 | test sleep 30 | test rainbow 30");
                 return 2;
             }
             return TestMode.Run(args);

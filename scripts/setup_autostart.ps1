@@ -1,3 +1,9 @@
+$ErrorActionPreference = 'Stop'
+trap {
+    Write-Host ("RGB Auto Off setup failed. " + $_.Exception.Message)
+    exit 1
+}
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root  = Split-Path -Parent $scriptDir
 $bin   = Join-Path $root 'bin'

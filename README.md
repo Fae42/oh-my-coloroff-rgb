@@ -14,21 +14,14 @@
 
 前提：Windows 10/11、**七彩虹主板**、**已安装 [iGC.Lite](https://www.colorful.cn)**。
 
-**1. 下载** [`oh-my-coloroff-rgb-win-x64.zip`](../../releases)（最新 Release），解压到任意位置。
+### 安装版（推荐）
 
-**2. 安装**：在解压后的文件夹空白处右键 →「在终端中打开」（Windows 10：按住 Shift 右键
-→「在此处打开 PowerShell 窗口」），粘贴运行：
+1. 下载 [`oh-my-coloroff-rgb-win-x64.zip`](../../releases/latest/download/oh-my-coloroff-rgb-win-x64.zip)，解压到准备长期保留的位置。
+2. 双击 `install.cmd`。程序会立即启动并设置开机自启，托盘出现黄点即可。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\setup_autostart.ps1
-```
+**绿色版**：下载 [`RgbAuto.exe`](../../releases/latest/download/RgbAuto.exe)，双击直接运行；不安装、不带开机自启。
 
-完成后开机自启，程序意外退出也会被自动拉起。
-
-**3. 启动**：双击 `bin\RgbAuto.exe`，托盘出现黄点即成功（跳过也行，下次开机自动启动）。
-
-> 只想先看看？下载裸 `RgbAuto.exe` 直接运行，不安装、不带自启。
-> 卸载：运行 `scripts\remove_autostart.ps1`，再删除文件夹。
+**卸载**：双击安装版文件夹里的 `uninstall.cmd`，然后删除文件夹。
 
 ## 特性
 
@@ -45,8 +38,8 @@ powershell -ExecutionPolicy Bypass -File scripts\setup_autostart.ps1
 
 - 平时当它不存在。想调灯效就打开 iGC.Lite，调完关掉即可。
 - 托盘菜单的"恢复灯效 / 立即关灯"立即生效并保持，直到下一次屏幕状态变化。
-- 托盘"退出"是真的退出（不会再被自动拉起；开机自启任务保留——重跑 setup 脚本即恢复；
-  运行 `scripts\remove_autostart.ps1` 则完全卸载）。
+- 托盘"退出"是真的退出（不会再被自动拉起；开机自启任务保留——重新双击 `install.cmd` 即恢复；
+  双击 `uninstall.cmd` 并删除文件夹则完全卸载）。
 - `tools\关闭显示器.cmd` / `turn-off-display.cmd`：手动熄屏小工具，不用等空闲超时就能测试联动。
 
 ## 工作原理

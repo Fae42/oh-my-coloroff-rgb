@@ -16,23 +16,14 @@ is restored.
 
 Requires Windows 10/11, a **Colorful motherboard**, and **[iGC.Lite](https://www.colorful.cn) installed**.
 
-**1. Download** [`oh-my-coloroff-rgb-win-x64.zip`](../../releases) (latest release) and
-extract it anywhere.
+### Installer (recommended)
 
-**2. Install**: in the extracted folder, right-click empty space → **Open in Terminal**
-(Windows 10: Shift+right-click → *Open PowerShell window here*), then paste and run:
+1. Download [`oh-my-coloroff-rgb-win-x64.zip`](../../releases/latest/download/oh-my-coloroff-rgb-win-x64.zip) and extract it to a folder you plan to keep.
+2. Double-click `install.cmd`. The app starts immediately and at boot; a yellow dot in the tray means it is running.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\setup_autostart.ps1
-```
+**Portable**: download [`RgbAuto.exe`](../../releases/latest/download/RgbAuto.exe) and double-click it. No installation or autostart.
 
-That's autostart at boot, plus auto-relaunch if the daemon ever dies.
-
-**3. Start it**: double-click `bin\RgbAuto.exe` — a yellow dot in the tray means success
-(skippable; it starts at next boot anyway).
-
-> Just looking? Grab the bare `RgbAuto.exe` and run it — no install, no autostart.
-> Uninstall: run `scripts\remove_autostart.ps1`, then delete the folder.
+**Uninstall**: double-click `uninstall.cmd` in the installer folder, then delete the folder.
 
 ## Features
 
@@ -55,7 +46,7 @@ That's autostart at boot, plus auto-relaunch if the daemon ever dies.
 - Tray *Restore effect* / *Lights off* take effect immediately and stick until the next
   display change.
 - Tray **Exit** = stop for real (no auto-relaunch afterwards; the autostart task stays —
-  re-run the setup script to re-enable, `scripts\remove_autostart.ps1` to uninstall fully).
+  run `install.cmd` again to re-enable it, or `uninstall.cmd` and delete the folder to remove everything).
 - `tools\turn-off-display.cmd`: manual screen-off helper for testing without waiting
   for the idle timeout.
 

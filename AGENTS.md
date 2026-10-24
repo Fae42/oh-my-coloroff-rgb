@@ -41,6 +41,19 @@ Releases are created via the GitHub REST API (no `gh` CLI on this machine; token
 what changed for the user, upgrade notes, SHA256. Internal details (class names,
 refactors, test scaffolding) belong in commit messages, not in the notes.
 
+Publish two assets built from the SAME `bin\RgbAuto.exe`: the portable `RgbAuto.exe`
+and the installer `oh-my-coloroff-rgb-win-x64.zip`. The ZIP layout is
+`oh-my-coloroff-rgb/{install.cmd, uninstall.cmd, bin/RgbAuto.exe, scripts/*}` (all
+four scripts). Users only double-click the root `.cmd` files; `install.cmd` also
+starts the daemon after successful setup. The tasks reference the extracted folder,
+so the README tells users to keep it. Verify from a path containing spaces, verify
+that missing scripts produce a non-zero exit without starting the daemon, and check
+that the ZIP exe and portable exe have identical SHA256 hashes.
+
+In the `.cmd` wrappers, compare `%ERRORLEVEL%` explicitly with 0. Do NOT simplify to
+`if errorlevel 1`: PowerShell returned `-196608` for a missing `-File` in testing,
+and a positive-only check lets the installer continue after a failure.
+
 ## Architecture invariants (do not break)
 
 - **Single instance** via named mutex `Local\RgbAutoDaemon.SingleInstance` (daemon AND
@@ -55,7 +68,7 @@ refactors, test scaffolding) belong in commit messages, not in the notes.
   use non-zero codes by design and a restart policy would fight iGC.Lite for hardware.
 - **The watchdog must only cover unexpected death**: tray Exit disables the
   `RGB Auto Off Watchdog` task (via `schtasks /Disable`, no elevation needed for own
-  tasks); `scripts\setup_autostart.ps1` re-enables it.
+  tasks); `install.cmd` (via `scripts\setup_autostart.ps1`) re-enables it.
 - **The watchdog task action must stay windowless**: it fires every 5 minutes, and a
   direct `powershell.exe` action flashes a console window even with `-WindowStyle
   Hidden` (the flash steals focus from fullscreen apps). Route the task through

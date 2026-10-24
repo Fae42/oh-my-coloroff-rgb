@@ -4,7 +4,18 @@ trap {
     exit 1
 }
 
-Unregister-ScheduledTask -TaskName 'RGB Auto Off' -Confirm:$false -ErrorAction SilentlyContinue
-Unregister-ScheduledTask -TaskName 'RGB Auto Off Watchdog' -Confirm:$false -ErrorAction SilentlyContinue
-Stop-Process -Name RgbAuto -Force -ErrorAction SilentlyContinue
+foreach ($taskName in @('RGB Auto Off', 'RGB Auto Off Watchdog')) {
+    try {
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
+    }
+    catch {
+        if ($_.FullyQualifiedErrorId -ne 'CmdletizationQuery_NotFound_TaskName,Unregister-ScheduledTask') { throw }
+    }
+}
+try {
+    Stop-Process -Name RgbAuto -Force -ErrorAction Stop
+}
+catch {
+    if ($_.FullyQualifiedErrorId -ne 'NoProcessFoundForGivenName,Microsoft.PowerShell.Commands.StopProcessCommand') { throw }
+}
 Write-Host "RGB Auto Off stopped and removed (daemon, watchdog, autostart). Re-enable with scripts\setup_autostart.ps1"

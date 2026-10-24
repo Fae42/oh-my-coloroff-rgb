@@ -29,6 +29,6 @@ $wdAction = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ('//nologo 
 $wdTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration ([TimeSpan]::FromDays(3650))
 Register-ScheduledTask -TaskName 'RGB Auto Off Watchdog' -Action $wdAction -Trigger $wdTrigger -Settings $settings -Principal $principal -Description 'Relaunch RGB Auto Off daemon every 5 min if not running' -Force | Out-Null
 # Tray exit disables the watchdog; re-running setup must bring it back.
-Enable-ScheduledTask -TaskName 'RGB Auto Off Watchdog' -ErrorAction SilentlyContinue
+Enable-ScheduledTask -TaskName 'RGB Auto Off Watchdog'
 
 Get-ScheduledTask -TaskName 'RGB Auto Off*' | Select-Object TaskName, State
